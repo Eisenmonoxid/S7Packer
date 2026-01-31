@@ -7,7 +7,7 @@ Simply launch the executable with the path to the .bba file and optionally the p
 
 For example:
 ```
-C:\\Settlers\\S7Packer.exe C:\\Settlers\\Maps.bba C:\\Settlers\\PackingFolder\\ -- Packs the content of PackingFolder into Maps.bba
+C:\Settlers\S7Packer.exe C:\Settlers\Maps.bba C:\Settlers\PackingFolder\ -- Packs the content of PackingFolder into Maps.bba
 ```
 
 ## Features
