@@ -428,13 +428,12 @@ namespace S7Packer.Source
             using FileStream Input = File.OpenRead(CurrentPath);
             Crc32 CRC = new();
             long Position = Writer.BaseStream.Position;
-
-			byte[] inputBuffer = new byte[ONE_MIB];
+			byte[] Buffer = new byte[Math.Min(ONE_MIB, Input.Length - Input.Position)];
 			int bytesRead;
-			while ((bytesRead = Input.Read(inputBuffer, 0, inputBuffer.Length)) > 0)
+			while ((bytesRead = Input.Read(Buffer, 0, Buffer.Length)) > 0)
 			{
-				CRC.Append(inputBuffer.AsSpan(0, bytesRead));
-                Writer.Write(inputBuffer);
+				CRC.Append(Buffer.AsSpan(0, bytesRead));
+                Writer.Write(Buffer, 0, bytesRead);
             }
 
 			uint Length = (uint)(Writer.BaseStream.Position - Position);
