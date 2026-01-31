@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<OutputType>Exe</OutputType>
+		<GenerateAssemblyInfo>True</GenerateAssemblyInfo>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+		<DebugType>portable</DebugType>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+		<CleanBeforeBuild>True</CleanBeforeBuild>
+		<BuiltInComInteropSupport>False</BuiltInComInteropSupport>
+		<IncludeNativeLibrariesForSelfExtract>True</IncludeNativeLibrariesForSelfExtract>
+		<PublishTrimmed>True</PublishTrimmed>
+		<PublishAot>True</PublishAot>
+		<PublishSingleFile>True</PublishSingleFile>
+		<SelfContained>True</SelfContained>
+		<DebugType>none</DebugType>
+		<InvariantGlobalization>True</InvariantGlobalization>
+		<EnableCompressionInSingleFile>True</EnableCompressionInSingleFile>
+		<StripSymbols>True</StripSymbols>
+		<DebuggerSupport>False</DebuggerSupport>
+		<EnableUnsafeBinaryFormatterSerialization>False</EnableUnsafeBinaryFormatterSerialization>
+		<EnableUnsafeUTF7Encoding>False</EnableUnsafeUTF7Encoding>
+		<MetadataUpdaterSupport>False</MetadataUpdaterSupport>
+		<MetricsSupport>False</MetricsSupport>
+		<XmlResolverIsNetworkingEnabledByDefault>False</XmlResolverIsNetworkingEnabledByDefault>
+	</PropertyGroup>
+
+	<PropertyGroup>
+    	<NoWin32Manifest>True</NoWin32Manifest>
+  	</PropertyGroup>
+	
+	<PropertyGroup>
+		<ApplicationIcon>favicon.ico</ApplicationIcon>
+		<ProduceReferenceAssembly>False</ProduceReferenceAssembly>
+		<AssemblyVersion>1.0.0.0</AssemblyVersion>
+		<FileVersion>1.0.0.0</FileVersion>
+		<NuGetAudit>False</NuGetAudit>
+		<Authors>Eisenmonoxid</Authors>
+		<Version>1</Version>
+		<Company>Eisenmonoxid</Company>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Content Include="favicon.ico" />
+	</ItemGroup>
+  	<ItemGroup>
+    	<PackageReference Include="System.IO.Hashing" Version="10.0.1"/>
+	</ItemGroup>
+
+</Project>
