@@ -2,6 +2,8 @@ name: Build & Release .NET 10
 
 on:
   push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
