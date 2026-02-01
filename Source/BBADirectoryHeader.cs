@@ -11,7 +11,6 @@ namespace S7Packer.Source
 		public uint Length;
 		public uint CRC32;
 		public long EncryptionIdentifier;
-
 		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 40)]
 		public byte[] Reserved;
 	}
@@ -21,7 +20,8 @@ namespace S7Packer.Source
 		private BBADirectoryHeaderDefinition Definition;
 		public ref BBADirectoryHeaderDefinition GetDefinition() => ref Definition;
 
-		private long GetEncryptionIdentifier(uint[] Data) => BitConverter.ToInt64([.. BitConverter.GetBytes(Data[0]), .. BitConverter.GetBytes(Data[1])], 0);
+		private static long GetEncryptionIdentifier(uint[] Data) => 
+			BitConverter.ToInt64([.. BitConverter.GetBytes(Data[0]), .. BitConverter.GetBytes(Data[1])], 0);
 		public byte[] Serialize() => Utility.Serialize(Definition);
 
 		public BBADirectoryHeader(ReadOnlySpan<uint> Data) // Data Length = 16

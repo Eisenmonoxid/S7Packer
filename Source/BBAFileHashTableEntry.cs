@@ -6,7 +6,7 @@ namespace S7Packer.Source
 	internal class BBAFileHashTableEntry(uint[] Data)
     {
 		public uint Offset = Data[1];
-		public readonly uint Hash = Data[0];
+		public uint Hash = Data[0];
 		public string FileName;
 
         public List<byte> CreateHashTableData() => [.. BitConverter.GetBytes(Hash), .. BitConverter.GetBytes(Offset)];

@@ -15,7 +15,7 @@ namespace S7Packer.Source
 		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
 		public byte[] ArchiveHeader;
 		public byte Version;
-		public uint Value; // 7
+		public uint Value;
 		public uint HeaderSize2;
 		public uint HeaderEncryptionIdentifier;
 		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]

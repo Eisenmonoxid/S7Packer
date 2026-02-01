@@ -43,6 +43,12 @@ namespace S7Packer.Source
 		private readonly uint[] CurrentBBADirectoryHeader;
 		private readonly Crypt Crypt = new();
 		private readonly bool IS_PRODUCT = true;
+		private readonly Dictionary<BBAArchiveFileType, List<string>> FileTypeExtensions = new()
+		{
+			{BBAArchiveFileType.TEA, 		[]},
+			{BBAArchiveFileType.Compressed, []},
+			{BBAArchiveFileType.None, 		[]}
+		};
 
 		public BBAArchiveFile(FileStream Archive)
 		{
@@ -70,7 +76,7 @@ namespace S7Packer.Source
 				throw;
 			}
 		}
-
+		
 		private bool IsDemoOrProductGameVersion(BinaryReader Reader)
 		{
 			try
@@ -158,8 +164,16 @@ namespace S7Packer.Source
 
 		private BBAArchiveFileType GetOriginalFileTypeByName(string FileName)
 		{
-			var Result = GlobalFileData.Find(Element => Element.FileName == FileName);
-			return Result != default ? (BBAArchiveFileType)Result.GetDefinition().FileType : BBAArchiveFileType.None;
+			string Extension = Path.GetExtension(FileName).ToLowerInvariant();
+			foreach (var Element in FileTypeExtensions)
+			{
+				if (Element.Value.Contains(Extension))
+				{
+					return Element.Key;
+				}
+			}
+
+			return BBAArchiveFileType.None;
 		}
 
 		private BBADataEntry GetBBAFileDefinition(string BasePath, string FilePath, BinaryWriter Writer)
@@ -197,30 +211,15 @@ namespace S7Packer.Source
 			List<string> ElementsToPack = Utility.GetFiles(InputFolderPath);
 			ElementsToPack.Insert(0, InputFolderPath);
 
-			string MissingHashTableEntries = string.Empty;
 			string Temporary = Path.GetTempFileName();
-
 			BinaryWriter Writer = new(File.OpenWrite(Temporary));
             foreach (string FileOrFolder in ElementsToPack)
 			{
 				var BBAFile = GetBBAFileDefinition(InputFolderPath, FileOrFolder, Writer);
-				if (!GlobalHashTableIndex.ContainsKey(BBAFile.FileName))
-				{
-					MissingHashTableEntries += FileOrFolder + Environment.NewLine;
-					continue;
-				}
-
 				PackedFiles.Add(BBAFile);
             }
 
 			Writer.Dispose();
-
-            if (!string.IsNullOrEmpty(MissingHashTableEntries))
-			{
-				Console.WriteLine("[ERROR] Missing HashTable Entries:" + Environment.NewLine + MissingHashTableEntries);
-				File.Delete(Temporary);
-				return false;
-			}
 
 			string ArchiveFileName = ArchiveFileStream.Name;
 			ArchiveFileStream.Dispose();
@@ -301,6 +300,49 @@ namespace S7Packer.Source
 			return true;
         }
 
+		private void ModifyHashTableElement(List<BBAFileHashTableEntry> GlobalHashTable, string FileName, uint Offset)
+		{
+			if (!GlobalHashTableIndex.TryGetValue(FileName, out int Index))
+			{
+				// Create new HashTable Entry
+				Crc32 CRC = new();
+				CRC.Append(Encoding.UTF8.GetBytes(FileName));
+                BBAFileHashTableEntry Entry = new([CRC.GetCurrentHashAsUInt32(), Offset])
+                {
+                    FileName = FileName
+                };
+
+				int FoundIndex = GlobalHashTable.FindIndex(Element => Element.FileName == string.Empty);
+				if (FoundIndex == -1)
+				{
+					Console.WriteLine("[ERROR]: No empty HashTable entry found for file " + FileName);
+					return;
+				}
+
+                GlobalHashTable[FoundIndex] = Entry;
+			}
+			else
+			{
+				GlobalHashTable[Index].Offset = Offset;
+			}
+		}
+
+		private void CleanHashTableEntries(List<BBADataEntry> Files, List<BBAFileHashTableEntry> GlobalHashTable)
+		{
+			foreach (var Element in GlobalHashTable)
+			{
+				if (Element.FileName != string.Empty)
+				{
+					if (Files.FindIndex(File => File.FileName == Element.FileName) == -1)
+					{
+						Element.FileName = string.Empty;
+						Element.Hash = 0;
+						Element.Offset = 0;
+					}	
+				}
+			}
+		}
+
 		private List<byte> UpdateBBADataEntryWithNewData(List<BBADataEntry> Files, List<BBAFileHashTableEntry> GlobalHashTable)
 		{
 			List<byte> Result = [];
@@ -313,8 +355,7 @@ namespace S7Packer.Source
 				ref BBADataEntryDefinition Definition = ref curFile.GetDefinition();
 				byte[] FileData = curFile.Serialize();
 
-				int curIndex = GlobalHashTableIndex[curFile.FileName];
-				GlobalHashTable[curIndex].Offset = Count;
+				ModifyHashTableElement(GlobalHashTable, curFile.FileName, Count);
 				Count += (uint)FileData.Length;
 
 				if (i == Files.Count - 1)
@@ -348,6 +389,7 @@ namespace S7Packer.Source
 			FileInfo Info = new(filePath);
 			BBAHeader curHeader = new(default);
 			List<byte> UpdatedBBAEntry = UpdateBBADataEntryWithNewData(Files, GlobalHashTable);
+			CleanHashTableEntries(Files, GlobalHashTable);
 
             BBADirectory Directory = new(default);
 			ref BBADirectoryDefinition bbaDirectoryDef = ref Directory.GetDefinition();
@@ -429,6 +471,7 @@ namespace S7Packer.Source
             Crc32 CRC = new();
             long Position = Writer.BaseStream.Position;
 			byte[] Buffer = new byte[Math.Min(ONE_MIB, Input.Length - Input.Position)];
+
 			int bytesRead;
 			while ((bytesRead = Input.Read(Buffer, 0, Buffer.Length)) > 0)
 			{
@@ -461,7 +504,6 @@ namespace S7Packer.Source
 
 			byte[] inputBuffer = new byte[ONE_MIB];
 			int bytesRead;
-
 			while ((bytesRead = Input.Read(inputBuffer, 0, inputBuffer.Length)) > 0)
 			{
 				DecompressedCRC.Append(inputBuffer.AsSpan(0, bytesRead));
@@ -498,14 +540,14 @@ namespace S7Packer.Source
 
 			BBAFile.FileName = Name;
 			Definition.FileNameLength = (uint)Name.Length;
-			Definition.FileNameOffset = 0u;
-			Definition.FileType = 256u;
-			Definition.DecompressedFileSize = 0u;
-			Definition.DecompressedCrc32 = 0u;
-			Definition.CompressedFileSize = 0u;
-			Definition.CompressedCrc32 = 0u;
-			Definition.FileOffset = 0u;
-			Definition.BlockSize = 0u;
+			Definition.FileNameOffset = 0;
+			Definition.FileType = 256;
+			Definition.DecompressedFileSize = 0;
+			Definition.DecompressedCrc32 = 0;
+			Definition.CompressedFileSize = 0;
+			Definition.CompressedCrc32 = 0;
+			Definition.FileOffset = 0;
+			Definition.BlockSize = 0;
 			Definition.TimeStamp = new uint[2];
 
 			return BBAFile;
@@ -524,8 +566,9 @@ namespace S7Packer.Source
 			List<BBADataEntry> Result = [];
 
 			uint HeaderSizeWithoutFileName = HEADER_SIZE;
-			int FileIndex = 1;
 			uint curFileNameLength = 0;
+
+			int FileIndex = 1;
 			int curEntryStartIndex = (int)HEADER_START_OFFSET;
 			int curEntryLength = 0;
 			int DataIndex = (int)HEADER_START_OFFSET;
@@ -544,10 +587,18 @@ namespace S7Packer.Source
 				else if (FileIndex > HeaderSizeWithoutFileName && (FileIndex - HeaderSizeWithoutFileName) > curFileNameLength)
 				{
 					Result.Add(new BBADataEntry(Data.AsSpan(curEntryStartIndex, curEntryLength)));
-					FileIndex = (Result[^1].GetDefinition().FileNameLength % 4 == 0) ? 0 : 1;
+					ref BBADataEntryDefinition Definition = ref Result[^1].GetDefinition();
 
+					FileIndex = (Definition.FileNameLength % 4 == 0) ? 0 : 1;
 					curEntryStartIndex = DataIndex + (FileIndex == 0 ? 1 : 0);
             		curEntryLength = 0;
+
+					string Extension = Path.GetExtension(Result[^1].FileName).ToLowerInvariant();
+					bool Found = FileTypeExtensions.TryGetValue((BBAArchiveFileType)Definition.FileType, out List<string> Extensions);
+					if (Found && !string.IsNullOrEmpty(Extension) && !Extensions.Contains(Extension))
+					{
+						Extensions.Add(Extension);
+					}
 				}
 			}
 			
