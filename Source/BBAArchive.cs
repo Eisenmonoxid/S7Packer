@@ -75,8 +75,10 @@ namespace S7Packer.Source
 				Console.WriteLine("[ERROR] " + ex.Message);
 				throw;
 			}
+
+			Console.WriteLine("[INFO] Loaded BBA Archive with " + GlobalFileData.Count + " files.");
 		}
-		
+
 		private bool IsDemoOrProductGameVersion(BinaryReader Reader)
 		{
 			try
@@ -269,7 +271,7 @@ namespace S7Packer.Source
             {
 				case (uint)BBAArchiveFileType.Compressed:
 				{
-					Console.WriteLine("File Type ZLIB - Name: " + CurrentFile.FileName);
+					Console.WriteLine("[ZLIB] Name: " + CurrentFile.FileName);
 					for (int Offset = 0; Offset < Source.Length; Offset += ONE_MIB)
 					{
 						int ChunkSize = Math.Min(ONE_MIB, Source.Length - Offset);
@@ -284,14 +286,14 @@ namespace S7Packer.Source
 				}
                 case (uint)BBAArchiveFileType.TEA:
 				{
-					Console.WriteLine("File Type TEA - Name: " + CurrentFile.FileName);
+					Console.WriteLine("[TEA] Name: " + CurrentFile.FileName);
                     Crypt.HandleTEAFile(Source, Definition.FileNameLength, (int)Definition.BlockSize, Delta, LoopCount, false);
                     Writer.Write(Source);
                     break;
 				}
                 default:
 				{
-					Console.WriteLine("File Type DEFAULT - Name: " + CurrentFile.FileName);
+					Console.WriteLine("[DEFAULT] Name: " + CurrentFile.FileName);
                     Writer.Write(Source);
                     break;
 				}
@@ -338,6 +340,8 @@ namespace S7Packer.Source
 						Element.FileName = string.Empty;
 						Element.Hash = 0;
 						Element.Offset = 0;
+
+						Console.WriteLine("[INFO] Cleaned HashTable entry for file: " + Element.FileName);
 					}	
 				}
 			}
@@ -377,7 +381,7 @@ namespace S7Packer.Source
 
 				Size += Definition.CompressedFileSize;
 				Result.AddRange(curFile.Serialize());
-				Console.WriteLine("Packing file: " + curFile.FileName);
+				Console.WriteLine("[PACKED] Name: " + curFile.FileName);
             }
 
 			return Result;
