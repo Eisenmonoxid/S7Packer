@@ -14,8 +14,8 @@ C:\Settlers\S7Packer.exe C:\Settlers\Maps.bba C:\Settlers\Maps_Extracted\ -- Pac
 
 ## Features
 - Extracts all data from Settlers 7 .bba archive files from both the Demo and the Final Release of the game.
-- Can repack those files into a .bba archive file (Important: Only modifications of files are possible).
+- Can repack those files into a .bba archive file. In contrast to the original tool, it is also possible to add new files to an archive.
 - Works on both Windows and Linux, fast file encryption/decryption by utilizing `Span<T>`.
-- Fixes some errors (like repacking LngEN.bba resulting in corruption and data loss) of the old tool.
+- Fixes some errors (like repacking LngEN.bba resulting in corruption and data loss) of the original tool.
 
 **Should there be any questions: [Settlers Discord Server](https://discord.gg/7SGkQtAAET).**
