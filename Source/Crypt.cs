@@ -76,7 +76,7 @@ namespace S7Packer.Source
 			}
 		}
 
-		public void HandleTEAFile(byte[] Data, uint FileNameLength, int BlockSize, uint Delta, int LoopCount, bool Encryption)
+		public void HandleTEAFile(byte[] Data, uint FileNameLength, uint BlockSize, uint Delta, int LoopCount, bool Encryption)
 		{
 			ReadOnlySpan<uint> Keys =
             [
@@ -86,11 +86,15 @@ namespace S7Packer.Source
 				189782668u  ^ FileNameLength
 			];
 
-			for (int Offset = 0; Offset < Data.Length; Offset += BlockSize)
+			Console.WriteLine(BlockSize.ToString());
+
+			for (uint Offset = 0; Offset < Data.Length; Offset += BlockSize)
 			{
-				int Remaining = Data.Length - Offset;
-				int CopyLength = Math.Min(BlockSize, Remaining);
-				int Padding = CopyLength == BlockSize ? BlockSize : (Remaining + 7) & ~7;
+				long Remaining = Data.Length - Offset;
+				long CopyLength = Math.Min(BlockSize, Remaining);
+				long Padder = (Remaining + 3) & ~3;
+
+				long Padding = CopyLength == BlockSize ? BlockSize : Padder;
 				byte[] Buffer = new byte[Padding];
 
 				Array.Copy(Data, Offset, Buffer, 0, CopyLength);

@@ -287,7 +287,7 @@ namespace S7Packer.Source
                 case (uint)BBAArchiveFileType.TEA:
 				{
 					Console.WriteLine("[TEA] Name: " + CurrentFile.FileName);
-                    Crypt.HandleTEAFile(Source, Definition.FileNameLength, (int)Definition.BlockSize, Delta, LoopCount, false);
+                    Crypt.HandleTEAFile(Source, Definition.FileNameLength, Definition.BlockSize, Delta, LoopCount, false);
                     Writer.Write(Source);
                     break;
 				}
