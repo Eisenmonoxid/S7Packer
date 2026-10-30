@@ -265,7 +265,11 @@ namespace S7Packer.Source
 			}
 
             using BinaryWriter Writer = new(File.OpenWrite(OutputPath));
-            byte[] Source = GlobalArchiveReader.ReadBytes((int)Definition.CompressedFileSize);
+            // TEA also encrypts the final word's padding, which is not included in the stored file size.
+            uint StoredSize = Definition.FileType == (uint)BBAArchiveFileType.TEA
+                ? (Definition.CompressedFileSize + 3) & ~3u
+                : Definition.CompressedFileSize;
+            byte[] Source = GlobalArchiveReader.ReadBytes((int)StoredSize);
 
             switch (Definition.FileType)
             {
@@ -288,7 +292,7 @@ namespace S7Packer.Source
 				{
 					Console.WriteLine("[TEA] Name: " + CurrentFile.FileName);
                     Crypt.HandleTEAFile(Source, Definition.FileNameLength, Definition.BlockSize, Delta, LoopCount, false);
-                    Writer.Write(Source);
+                    Writer.Write(Source, 0, (int)Definition.DecompressedFileSize);
                     break;
 				}
                 default:
