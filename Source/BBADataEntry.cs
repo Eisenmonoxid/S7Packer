@@ -4,7 +4,7 @@ using System.Text;
 
 namespace S7Packer.Source
 {
-	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
 	public struct BBADataEntryDefinition
 	{
 		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
@@ -35,7 +35,7 @@ namespace S7Packer.Source
 		public ref BBADataEntryDefinition GetDefinition() => ref Definition;
 		public string FileName;
 
-		public uint[] GetTimeStamp(DateTime Date)
+		public static uint[] GetTimeStamp(DateTime Date)
 		{
 			byte[] Result = BitConverter.GetBytes(Date.Ticks);
 			return [BitConverter.ToUInt32(Result, 0), BitConverter.ToUInt32(Result, 4)];

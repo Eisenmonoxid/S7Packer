@@ -139,7 +139,7 @@ namespace S7Packer.Source
 			return MemoryMarshal.Cast<byte, uint>(Bytes.AsSpan()).ToArray();
         }
 
-		private List<BBAFileHashTableEntry> GetArchiveFileHashTable(uint[] DirectoryHeader, BBADirectory Directory, List<BBADataEntry> FileData)
+		private static List<BBAFileHashTableEntry> GetArchiveFileHashTable(uint[] DirectoryHeader, BBADirectory Directory, List<BBADataEntry> FileData)
 		{
 			int HashTableStartIndex = (int)Directory.GetDefinition().OffsetFileHashtable / 4;
 			uint[] Destination = new uint[DirectoryHeader[HashTableStartIndex] * 2];
@@ -147,7 +147,7 @@ namespace S7Packer.Source
 			return BBAFileHashTableEntry.GetBBAFileHashTable(Destination, FileData);
 		}
 
-		private Dictionary<string, int> GetArchiveFileHashTableIndex(List<BBAFileHashTableEntry> Info)
+		private static Dictionary<string, int> GetArchiveFileHashTableIndex(List<BBAFileHashTableEntry> Info)
 		{
 			Dictionary<string, int> Dict = [];
 			int Index = 0;
@@ -276,7 +276,7 @@ namespace S7Packer.Source
 					{
 						int ChunkSize = Math.Min(ONE_MIB, Source.Length - Offset);
 						Span<byte> Chunk = Source.AsSpan(Offset, ChunkSize);
-						Crypt.DecryptCompressedFile(Chunk, Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
+                            Crypt.DecryptCompressedFile(Chunk, Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
 					}
 
 					using MemoryStream Memory = new(Source);
@@ -329,7 +329,7 @@ namespace S7Packer.Source
 			}
 		}
 
-		private void CleanHashTableEntries(List<BBADataEntry> Files, List<BBAFileHashTableEntry> GlobalHashTable)
+		private static void CleanHashTableEntries(List<BBADataEntry> Files, List<BBAFileHashTableEntry> GlobalHashTable)
 		{
 			foreach (var Element in GlobalHashTable)
 			{
@@ -393,7 +393,7 @@ namespace S7Packer.Source
 			FileInfo Info = new(filePath);
 			BBAHeader curHeader = new(default);
 			List<byte> UpdatedBBAEntry = UpdateBBADataEntryWithNewData(Files, GlobalHashTable);
-			CleanHashTableEntries(Files, GlobalHashTable);
+            CleanHashTableEntries(Files, GlobalHashTable);
 
             BBADirectory Directory = new(default);
 			ref BBADirectoryDefinition bbaDirectoryDef = ref Directory.GetDefinition();
@@ -413,7 +413,7 @@ namespace S7Packer.Source
 			int LoopCount = IS_PRODUCT ? PROD_FILE_LOOP : DEMO_FILE_LOOP;
 
 			byte[] Data = [.. UpdatedBBAEntry];
-			Crypt.Encrypt(Data.AsSpan(), Keys, Delta, LoopCount);
+            Crypt.Encrypt(Data.AsSpan(), Keys, Delta, LoopCount);
 
             using BinaryReader Reader = new(File.OpenRead(filePath));
             using BinaryWriter Writer = new(File.OpenWrite(output));
@@ -439,7 +439,7 @@ namespace S7Packer.Source
             Writer.Write(Data);
         }
 
-		private byte[] CreateDirectoryHeader(BBAHeader Header, uint FileLength, uint HeaderLength, uint CRC32)
+		private static byte[] CreateDirectoryHeader(BBAHeader Header, uint FileLength, uint HeaderLength, uint CRC32)
 		{
 			uint OffsetLow = HEADER_SIZE + Header.GetDefinition().HeaderSize + FileLength;
 			uint[] HeaderData = [OffsetLow, 0, HeaderLength, CRC32, 0, 0];
@@ -447,7 +447,7 @@ namespace S7Packer.Source
 			return Result.Serialize();
 		}
 
-		private BBADataEntry SetupBBADataEntry(string BasePath, string FilePath, BBAArchiveFileType FileType)
+		private static BBADataEntry SetupBBADataEntry(string BasePath, string FilePath, BBAArchiveFileType FileType)
 		{
 			BBADataEntry BBAFile = new(default);
 			ref BBADataEntryDefinition Definition = ref BBAFile.GetDefinition();
@@ -457,7 +457,7 @@ namespace S7Packer.Source
 			Definition.FileNameLength = (uint)Name.Length;
 			Definition.FileNameOffset = (uint)Name.LastIndexOf('\\') + 1;
 			Definition.FileType = (uint)FileType;
-			Definition.TimeStamp = BBAFile.GetTimeStamp(File.GetCreationTime(FilePath).AddYears(-1600));
+			Definition.TimeStamp = BBADataEntry.GetTimeStamp(File.GetCreationTime(FilePath).AddYears(-1600));
 			Definition.BlockSize = ONE_MIB;
 
 			FileInfo Info = new(FilePath);
@@ -522,7 +522,7 @@ namespace S7Packer.Source
 			while ((bytesRead = CompressedBuffer.Read(outputBuffer, 0, outputBuffer.Length)) > 0)
 			{
 				byte[] curBlock = outputBuffer[..bytesRead];
-				Crypt.EncryptCompressedFile(curBlock.AsSpan(), Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
+                Crypt.EncryptCompressedFile(curBlock.AsSpan(), Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
 
 				CompressedCRC.Append(curBlock);
 				Writer.Write(curBlock);
@@ -536,7 +536,7 @@ namespace S7Packer.Source
 			return bbaFile;
 		}
 
-		private BBADataEntry CreateBBAFileForDirectory(string BasePath, string CurrentPath)
+		private static BBADataEntry CreateBBAFileForDirectory(string BasePath, string CurrentPath)
 		{
 			BBADataEntry BBAFile = new(default);
 			ref BBADataEntryDefinition Definition = ref BBAFile.GetDefinition();
@@ -557,7 +557,7 @@ namespace S7Packer.Source
 			return BBAFile;
 		}
 
-		private BBADirectory GetDirectoryInfo(uint[] Data)
+		private static BBADirectory GetDirectoryInfo(uint[] Data)
 		{
 			uint Size = HEADER_START_OFFSET;
 			uint[] Current = new uint[Size];

@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace S7Packer.Source
 {
-	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
 	public struct BBADirectoryDefinition
 	{
 		public uint HeaderSize;

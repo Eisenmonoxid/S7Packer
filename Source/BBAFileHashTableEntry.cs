@@ -44,15 +44,6 @@ namespace S7Packer.Source
 					Table.FileName = Value;
 				}
 
-				// TODO: Restore the HashTable (add/remove files instead of modifying existing ones) ...
-				/*
-				byte[] Text = Encoding.UTF8.GetBytes(Table.FileName);
-				Crc32 CRC = new();
-				CRC.Append(Text);
-				uint hash = CRC.GetCurrentHashAsUInt32();
-				// Debugger.Log(0, "BBAFileHashTableEntry", "Calculated Hash: " + hash + " | Stored Hash: " + Table.Hash + " | FileName: " + Table.FileName + "\n");
-				*/
-
 				HashTable.Add(Table);
 			}
 
