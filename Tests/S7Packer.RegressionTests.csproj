@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <NuGetAudit>False</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Source/*.cs" Exclude="../Source/Program.cs" Link="Source/%(Filename)%(Extension)" />
+    <PackageReference Include="System.IO.Hashing" Version="10.0.1" />
+  </ItemGroup>
+</Project>

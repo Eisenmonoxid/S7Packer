@@ -49,6 +49,7 @@
 
 	<ItemGroup>
 		<Content Include="favicon.ico" />
+		<Compile Remove="Tests/**/*.cs" />
 	</ItemGroup>
   	<ItemGroup>
     	<PackageReference Include="System.IO.Hashing" Version="10.0.1"/>
