@@ -34,6 +34,12 @@ namespace S7Packer.Source
 		private BBADirectoryDefinition Definition;
 		public ref BBADirectoryDefinition GetDefinition() => ref Definition;
 
+		private static long CombineEncryptionIdentifier(uint A, uint B)
+		{
+			ulong Combined = ((ulong)A << 32) | B;
+			return unchecked((long)Combined);
+		}
+
 		public BBADirectory(uint[] Data) // Data.Length = 69
 		{
 			if (Data == default)
@@ -44,7 +50,7 @@ namespace S7Packer.Source
 					OffsetFileEntries = 272,
 					OffsetFileHashtable = uint.MaxValue,
 					Reserved = new byte[52],
-					ArchiveHeader = [.. "BAF".Select(C => (byte)C)],
+					ArchiveHeader = [(byte)'B', (byte)'A', (byte)'F'],
 					Version = 6,
 					Value = 7,
 					HeaderSize2 = 64,
@@ -65,15 +71,15 @@ namespace S7Packer.Source
 					OffsetFileEntries = Data[1],
 					OffsetFileHashtable = Data[2],
 					Reserved = new byte[52],
-					ArchiveHeader = [.. Data.Skip(16).Take(3).Select(B => (byte)B)],
-					Version = BitConverter.GetBytes(Data[16])[3],
+					ArchiveHeader = [(byte)Data[16], (byte)Data[17], (byte)Data[18]],
+					Version = (byte)(Data[16] >> 24),
 					Value = 7,
 					HeaderSize2 = Data[18],
 					HeaderEncryptionIdentifier = Data[19],
 					Reserved2 = new byte[16],
-					DirectoryEncryptionIdentifier = BitConverter.ToInt64([.. BitConverter.GetBytes(Data[24]), .. BitConverter.GetBytes(Data[25])], 0),
+					DirectoryEncryptionIdentifier = CombineEncryptionIdentifier(Data[24], Data[25]),
 					Reserved3 = new byte[44],
-					FileEncryptionIdentifier = BitConverter.ToInt64([.. BitConverter.GetBytes(Data[37]), .. BitConverter.GetBytes(Data[38])], 0),
+					FileEncryptionIdentifier = CombineEncryptionIdentifier(Data[37], Data[38]),
 					Reserved4 = new byte[116],
 					NumberOfFiles = Data[68]
 				};

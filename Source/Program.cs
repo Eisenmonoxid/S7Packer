@@ -23,7 +23,15 @@ namespace S7Packer.Source
             FileStream Stream = GetFileStream(args);
             if (Stream == null)
             {
-                Console.ReadKey();
+                try
+                {
+                    Console.ReadKey();
+                }
+                catch
+                {
+                    // Ignore
+                }
+
                 return;
             }
 
@@ -33,22 +41,30 @@ namespace S7Packer.Source
 
             Console.WriteLine("\n[INFO] Finished!" + (!Result ? " One or more errors occured." : " No errors occured."));
             Console.WriteLine("[INFO] Press any key to exit ...");
-            Console.ReadKey();
-
+            
+            try
+            {
+                Console.ReadKey();
+            }
+            catch
+            {
+                // Ignore
+            }
+            
             return;
 		}
 
 		static bool HandleFile(FileStream Stream, string Folder)
 		{
             bool Result;
-            Stopwatch Watch = new();
             BBAArchiveFile Archive;
+            Stopwatch Watch = new();
             
             try
             {
                 Archive = new BBAArchiveFile(Stream);
             }
-            catch (Exception)
+            catch
             {
                 return false;
             }

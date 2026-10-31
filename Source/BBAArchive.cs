@@ -41,7 +41,6 @@ namespace S7Packer.Source
 		private readonly Dictionary<string, int> GlobalHashTableIndex; // File Name, Index
 		private readonly BBADirectory GlobalDirectory;
 		private readonly uint[] CurrentBBADirectoryHeader;
-		private readonly Crypt Crypt = new();
 		private readonly bool IS_PRODUCT = true;
 		private readonly Dictionary<BBAArchiveFileType, List<string>> FileTypeExtensions = new()
 		{
@@ -149,16 +148,14 @@ namespace S7Packer.Source
 
 		private static Dictionary<string, int> GetArchiveFileHashTableIndex(List<BBAFileHashTableEntry> Info)
 		{
-			Dictionary<string, int> Dict = [];
-			int Index = 0;
-			foreach (var Element in Info)
+			Dictionary<string, int> Dict = new(StringComparer.Ordinal);
+			for (int Index = 0; Index < Info.Count; Index++)
 			{
-				if (!string.IsNullOrEmpty(Element.FileName) && !Dict.ContainsKey(Element.FileName))
+				string FileName = Info[Index].FileName;
+				if (!string.IsNullOrEmpty(FileName) && !Dict.ContainsKey(FileName))
 				{
-					Dict.Add(Element.FileName, Index);
+					Dict.Add(FileName, Index);
 				}
-
-				Index++;
 			}
 
 			return Dict;
@@ -166,12 +163,20 @@ namespace S7Packer.Source
 
 		private BBAArchiveFileType GetOriginalFileTypeByName(string FileName)
 		{
+			if (string.IsNullOrEmpty(FileName))
+			{
+				return BBAArchiveFileType.None;
+			}
+
 			string Extension = Path.GetExtension(FileName).ToLowerInvariant();
 			foreach (var Element in FileTypeExtensions)
 			{
-				if (Element.Value.Contains(Extension))
+				for (int i = 0; i < Element.Value.Count; i++)
 				{
-					return Element.Key;
+					if (string.Equals(Element.Value[i], Extension, StringComparison.Ordinal))
+					{
+						return Element.Key;
+					}
 				}
 			}
 
@@ -265,7 +270,6 @@ namespace S7Packer.Source
 			}
 
             using BinaryWriter Writer = new(File.OpenWrite(OutputPath));
-            // TEA also encrypts the final word's padding, which is not included in the stored file size.
             uint StoredSize = Definition.FileType == (uint)BBAArchiveFileType.TEA
                 ? (Definition.CompressedFileSize + 3) & ~3u
                 : Definition.CompressedFileSize;
@@ -384,9 +388,9 @@ namespace S7Packer.Source
 				}
 
 				Size += Definition.CompressedFileSize;
-				Result.AddRange(curFile.Serialize());
+				Result.AddRange(FileData);
 				Console.WriteLine("[PACKED] Name: " + curFile.FileName);
-            }
+			}
 
 			return Result;
 		}
@@ -590,7 +594,7 @@ namespace S7Packer.Source
 						break;
 					}
 
-					curFileNameLength = (uint)Math.Ceiling(Data[DataIndex] / 4.0); // Padded to 4 byte
+					curFileNameLength = (Data[DataIndex] + 3u) >> 2;
 				}
 				else if (FileIndex > HeaderSizeWithoutFileName && (FileIndex - HeaderSizeWithoutFileName) > curFileNameLength)
 				{
@@ -599,17 +603,30 @@ namespace S7Packer.Source
 
 					FileIndex = (Definition.FileNameLength % 4 == 0) ? 0 : 1;
 					curEntryStartIndex = DataIndex + (FileIndex == 0 ? 1 : 0);
-            		curEntryLength = 0;
+					curEntryLength = 0;
 
 					string Extension = Path.GetExtension(Result[^1].FileName).ToLowerInvariant();
-					bool Found = FileTypeExtensions.TryGetValue((BBAArchiveFileType)Definition.FileType, out List<string> Extensions);
-					if (Found && !string.IsNullOrEmpty(Extension) && !Extensions.Contains(Extension))
+					if (FileTypeExtensions.TryGetValue((BBAArchiveFileType)Definition.FileType, out List<string> Extensions)
+						&& !string.IsNullOrEmpty(Extension))
 					{
-						Extensions.Add(Extension);
+						bool HasExtension = false;
+						for (int i = 0; i < Extensions.Count; i++)
+						{
+							if (string.Equals(Extensions[i], Extension, StringComparison.OrdinalIgnoreCase))
+							{
+								HasExtension = true;
+								break;
+							}
+						}
+
+						if (!HasExtension)
+						{
+							Extensions.Add(Extension);
+						}
 					}
 				}
 			}
-			
+
 			return Result;
 		}
 	}

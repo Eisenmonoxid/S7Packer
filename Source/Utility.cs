@@ -7,26 +7,28 @@ namespace S7Packer.Source
 {
 	public static class Utility
 	{
-        public static FileStream OpenFileStream(string Path)
-        {
-            try
-            {
-                return new FileStream(Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-                return null;
-            }
-        }
+		public static FileStream OpenFileStream(string Path)
+		{
+			try
+			{
+				return new FileStream(Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex.Message);
+				return null;
+			}
+		}
 
 		public static List<string> GetFiles(string Input)
 		{
 			List<string> Files = [.. Directory.GetFiles(Input)];
-			foreach (string Element in Directory.GetDirectories(Input))
+			string[] Directories = Directory.GetDirectories(Input);
+			for (int i = 0; i < Directories.Length; i++)
 			{
-                Files.Add(Element);
-                Files.AddRange(GetFiles(Element));
+				string Element = Directories[i];
+				Files.Add(Element);
+				Files.AddRange(GetFiles(Element));
 			}
 
 			return Files;
@@ -52,8 +54,9 @@ namespace S7Packer.Source
 
 		public static string SanitizePath(string Base, string Result)
 		{
-			string Text = Result.Replace(Base, "").Replace("/", "\\").Replace("\\\\", "\\");
-			if (Text.StartsWith("\\"))
+			string Text = Result.Replace(Base, string.Empty).Replace('/', '\\');
+			Text = Text.Replace("\\\\", "\\");
+			if (Text.StartsWith('\\'))
 			{
 				Text = Text.TrimStart('\\');
 			}

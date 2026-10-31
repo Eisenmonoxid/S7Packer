@@ -20,21 +20,25 @@ namespace S7Packer.Source
 		private BBADirectoryHeaderDefinition Definition;
 		public ref BBADirectoryHeaderDefinition GetDefinition() => ref Definition;
 
-		private static long GetEncryptionIdentifier(uint[] Data) => 
-			BitConverter.ToInt64([.. BitConverter.GetBytes(Data[0]), .. BitConverter.GetBytes(Data[1])], 0);
+		private static long GetEncryptionIdentifier(uint Lower, uint Upper)
+		{
+			ulong Combined = ((ulong)Lower << 32) | Upper;
+			return unchecked((long)Combined);
+		}
+
 		public byte[] Serialize() => Utility.Serialize(Definition);
 
 		public BBADirectoryHeader(ReadOnlySpan<uint> Data) // Data Length = 16
 		{
-            Definition = new BBADirectoryHeaderDefinition
-            {
+			Definition = new BBADirectoryHeaderDefinition
+			{
 				OffsetLow = Data[0],
 				OffsetHigh = Data[1],
-				Length = Data[2] == 0 ? 16 : Data[2],
+				Length = Data[2] == 0 ? 16u : Data[2],
 				CRC32 = Data[3],
-				EncryptionIdentifier = (Data[4] == 0 || Data[5] == 0) ? -2151081698912143722 : GetEncryptionIdentifier([Data[4], Data[5]]),
+				EncryptionIdentifier = (Data[4] == 0 || Data[5] == 0) ? -2151081698912143722L : GetEncryptionIdentifier(Data[4], Data[5]),
 				Reserved = new byte[40],
-            };
-        }
+			};
+		}
 	}
 }

@@ -37,8 +37,11 @@ namespace S7Packer.Source
 
 		public static uint[] GetTimeStamp(DateTime Date)
 		{
-			byte[] Result = BitConverter.GetBytes(Date.Ticks);
-			return [BitConverter.ToUInt32(Result, 0), BitConverter.ToUInt32(Result, 4)];
+			ulong Ticks = (ulong)Date.Ticks;
+			return [
+				(uint)(Ticks & 0xFFFFFFFFu),
+				(uint)(Ticks >> 32)
+			];
 		}
 
 		public BBADataEntry(ReadOnlySpan<uint> Data, DateTime Date = default) // Data.Length >= 17
@@ -48,7 +51,7 @@ namespace S7Packer.Source
 				return;
 			}
 
-            Definition = new BBADataEntryDefinition
+			Definition = new BBADataEntryDefinition
 			{
 				TimeStamp = Date != default ? GetTimeStamp(Date) : [Data[0], Data[1]],
 				DecompressedFileSize = Data[2],
@@ -68,7 +71,8 @@ namespace S7Packer.Source
 			};
 
 			ReadOnlySpan<byte> Name = MemoryMarshal.Cast<uint, byte>(Data[16..]);
-			FileName = Encoding.ASCII.GetString(Name)[..(int)Definition.FileNameLength].TrimEnd('\0');
+			int Length = (int)Definition.FileNameLength;
+			FileName = Encoding.ASCII.GetString(Name.Slice(0, Length)).TrimEnd('\0');
 		}
 
 		public byte[] Serialize()
@@ -76,7 +80,7 @@ namespace S7Packer.Source
 			byte[] Name = Encoding.ASCII.GetBytes(FileName);
 			byte[] Result = Utility.Serialize(Definition);
 			int Size = Result.Length;
-			int NewSize = Size + (Name.Length + 3 & ~3);
+			int NewSize = Size + ((Name.Length + 3) & ~3);
 
 			if (Definition.FileNameLength % 4 == 0)
 			{

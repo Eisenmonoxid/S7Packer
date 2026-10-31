@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace S7Packer.Source
 {
-	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
 	public struct BBAHeaderDefinition
 	{
 		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
@@ -26,7 +26,7 @@ namespace S7Packer.Source
 			{
 				Definition = new BBAHeaderDefinition
 				{
-					ArchiveHeader = [.. "BAF".Select(C => (byte)C)],
+					ArchiveHeader = [(byte)'B', (byte)'A', (byte)'F'],
 					Version = 6,
 					Reserved = 7,
 					HeaderSize = 64,
@@ -37,7 +37,7 @@ namespace S7Packer.Source
 			{
 				Definition = new BBAHeaderDefinition
 				{
-					ArchiveHeader = [.. Data.Take(3)],
+					ArchiveHeader = [Data[0], Data[1], Data[2]],
 					Version = Data[3],
 					Reserved = 7,
 					HeaderSize = BitConverter.ToUInt32(Data, 8),

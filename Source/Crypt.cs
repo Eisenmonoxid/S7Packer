@@ -1,22 +1,30 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace S7Packer.Source
 {
-	public class Crypt
+	public static class Crypt
     {
-		private static uint FEISTEL(uint y, uint z, uint Sum, uint Key) => 
-			((y >> 5 ^ z << 2) + (y << 4 ^ z >> 3)) ^ ((Sum ^ z) + (Key ^ y));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private static uint FEISTEL(uint y, uint z, uint Sum, uint Key)
+		{
+			uint lhs = (y >> 5) ^ (z << 2);
+			uint rhs = (y << 4) ^ (z >> 3);
+			return (lhs + rhs) ^ ((Sum ^ z) + (Key ^ y));
+		}
 
-        public static void DecryptCompressedFile(Span<byte> Data, uint FileNameLength, uint[] XOR)
+		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
+		public static void DecryptCompressedFile(Span<byte> Data, uint FileNameLength, uint[] XOR)
 		{
 			Span<uint> Input = MemoryMarshal.Cast<byte, uint>(Data);
 			Input[3] ^= Input[2] ^ FileNameLength ^ XOR[3];
 			Input[2] ^= Input[1] ^ FileNameLength ^ XOR[2];
 			Input[1] ^= Input[0] ^ FileNameLength ^ XOR[1];
 			Input[0] ^= Input[3] ^ FileNameLength ^ XOR[0];
-        }
+		}
 
+		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		public static void EncryptCompressedFile(Span<byte> Data, uint FileNameLength, uint[] XOR)
 		{
 			Span<uint> Input = MemoryMarshal.Cast<byte, uint>(Data);
@@ -26,6 +34,7 @@ namespace S7Packer.Source
 			Input[3] ^= Input[2] ^ FileNameLength ^ XOR[3];
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		public static void Decrypt(Span<byte> Data, ReadOnlySpan<uint> Keys, uint Delta, int LoopCount)
 		{
 			Span<uint> Values = MemoryMarshal.Cast<byte, uint>(Data);
@@ -45,11 +54,12 @@ namespace S7Packer.Source
 				}
 
 				uint y0 = Values[Size - 1];
-				Values[0] -= ((y0 >> 5 ^ z << 2) + (y0 << 4 ^ z >> 3)) ^ ((Sum ^ z) + (Keys[e] ^ y0));
+				Values[0] -= FEISTEL(y0, z, Sum, Keys[e]);
 				Sum -= Delta;
 			}
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		public static void Encrypt(Span<byte> Data, ReadOnlySpan<uint> Keys, uint Delta, int LoopCount)
 		{
 			Span<uint> Values = MemoryMarshal.Cast<byte, uint>(Data);
@@ -72,11 +82,11 @@ namespace S7Packer.Source
 				}
 
 				uint z0 = Values[0];
-				Values[Size - 1] += ((y >> 5 ^ z0 << 2) + (y << 4 ^ z0 >> 3)) ^ ((Sum ^ z0) + (Keys[((Size - 1) & 3) ^ e] ^ y));
+				Values[Size - 1] += FEISTEL(y, z0, Sum, Keys[((Size - 1) & 3) ^ e]);
 			}
 		}
 
-		public void HandleTEAFile(byte[] Data, uint FileNameLength, uint BlockSize, uint Delta, int LoopCount, bool Encryption)
+		public static void HandleTEAFile(byte[] Data, uint FileNameLength, uint BlockSize, uint Delta, int LoopCount, bool Encryption)
 		{
 			ReadOnlySpan<uint> Keys =
             [
@@ -86,28 +96,39 @@ namespace S7Packer.Source
 				189782668u  ^ FileNameLength
 			];
 
-			Console.WriteLine(BlockSize.ToString());
-
 			for (uint Offset = 0; Offset < Data.Length; Offset += BlockSize)
 			{
 				long Remaining = Data.Length - Offset;
 				long CopyLength = Math.Min(BlockSize, Remaining);
-				long Padder = (Remaining + 3) & ~3;
+				bool FullBlock = CopyLength == BlockSize;
+				long Padding = FullBlock ? BlockSize : ((Remaining + 3) & ~3);
 
-				long Padding = CopyLength == BlockSize ? BlockSize : Padder;
-				byte[] Buffer = new byte[Padding];
-
-				Array.Copy(Data, Offset, Buffer, 0, CopyLength);
-				if (Encryption)
+				if (FullBlock)
 				{
-                    Encrypt(Buffer.AsSpan(), Keys, Delta, LoopCount);
+					Span<byte> Block = Data.AsSpan((int)Offset, (int)CopyLength);
+					if (Encryption)
+					{
+						Encrypt(Block, Keys, Delta, LoopCount);
+					}
+					else
+					{
+						Decrypt(Block, Keys, Delta, LoopCount);
+					}
 				}
 				else
 				{
-                    Decrypt(Buffer.AsSpan(), Keys, Delta, LoopCount);
+					byte[] Buffer = new byte[Padding];
+					Array.Copy(Data, Offset, Buffer, 0, CopyLength);
+					if (Encryption)
+					{
+						Encrypt(Buffer.AsSpan(), Keys, Delta, LoopCount);
+					}
+					else
+					{
+						Decrypt(Buffer.AsSpan(), Keys, Delta, LoopCount);
+					}
+					Array.Copy(Buffer, 0, Data, Offset, CopyLength);
 				}
-
-				Array.Copy(Buffer, 0, Data, Offset, CopyLength);
 			}
 		}
     }

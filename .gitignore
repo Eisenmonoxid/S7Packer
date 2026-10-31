@@ -362,6 +362,6 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 *.sln
-.vscode/
-.vscode/launch.json
-.vscode/tasks.json
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
