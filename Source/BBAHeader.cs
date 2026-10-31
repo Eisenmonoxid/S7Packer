@@ -19,6 +19,7 @@ namespace S7Packer.Source
 	{
 		private BBAHeaderDefinition Definition;
 		public ref BBAHeaderDefinition GetDefinition() => ref Definition;
+		public byte[] Serialize() => Utility.Serialize(Definition);
 
 		public BBAHeader(byte[] Data) // Data.Length = 16
 		{
@@ -45,7 +46,5 @@ namespace S7Packer.Source
 				};
 			}
 		}
-
-		public byte[] Serialize() => Utility.Serialize(Definition);
 	}
 }

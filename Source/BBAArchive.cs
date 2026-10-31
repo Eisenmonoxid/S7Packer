@@ -11,13 +11,6 @@ namespace S7Packer.Source
 {
 	internal class BBAArchiveFile
     {
-		private enum BBAArchiveFileType
-		{
-			TEA = 2,
-			Compressed = 17,
-			None = 0
-		}
-
 		private const int FILE_NAME_NUM = 13;
 		private const int ONE_MIB = 1048576;
 		private const uint PROD_HEAD_DELTA = 1231853475;
@@ -42,11 +35,11 @@ namespace S7Packer.Source
 		private readonly BBADirectory GlobalDirectory;
 		private readonly uint[] CurrentBBADirectoryHeader;
 		private readonly bool IS_PRODUCT = true;
-		private readonly Dictionary<BBAArchiveFileType, List<string>> FileTypeExtensions = new()
+		private readonly Dictionary<BBAArchiveDataEntryType, List<string>> FileTypeExtensions = new()
 		{
-			{BBAArchiveFileType.TEA, 		[]},
-			{BBAArchiveFileType.Compressed, []},
-			{BBAArchiveFileType.None, 		[]}
+			{BBAArchiveDataEntryType.TEA, 			[]},
+			{BBAArchiveDataEntryType.Compressed, 	[]},
+			{BBAArchiveDataEntryType.None, 			[]}
 		};
 
 		public BBAArchiveFile(FileStream Archive)
@@ -161,11 +154,11 @@ namespace S7Packer.Source
 			return Dict;
 		}
 
-		private BBAArchiveFileType GetOriginalFileTypeByName(string FileName)
+		private BBAArchiveDataEntryType GetOriginalFileTypeByName(string FileName)
 		{
 			if (string.IsNullOrEmpty(FileName))
 			{
-				return BBAArchiveFileType.None;
+				return BBAArchiveDataEntryType.None;
 			}
 
 			string Extension = Path.GetExtension(FileName).ToLowerInvariant();
@@ -180,7 +173,7 @@ namespace S7Packer.Source
 				}
 			}
 
-			return BBAArchiveFileType.None;
+			return BBAArchiveDataEntryType.None;
 		}
 
 		private BBADataEntry GetBBAFileDefinition(string BasePath, string FilePath, BinaryWriter Writer)
@@ -188,10 +181,14 @@ namespace S7Packer.Source
 			BBADataEntry BBA;
 			if (File.Exists(FilePath))
 			{
-				BBAArchiveFileType OriginalType = GetOriginalFileTypeByName(Utility.SanitizePath(BasePath, FilePath));
-				if (OriginalType == BBAArchiveFileType.Compressed)
+				BBAArchiveDataEntryType OriginalType = GetOriginalFileTypeByName(Utility.SanitizePath(BasePath, FilePath));
+				if (OriginalType == BBAArchiveDataEntryType.Compressed)
 				{
 					BBA = CreateBBAFileWithZLIBCompression(BasePath, FilePath, Writer);
+				}
+				else if (OriginalType == BBAArchiveDataEntryType.TEA)
+				{
+					BBA = CreateBBAFileWithTEAEncryption(BasePath, FilePath, Writer);
 				}
 				else
 				{
@@ -256,7 +253,7 @@ namespace S7Packer.Source
 			uint Delta = IS_PRODUCT ? PROD_FILE_DELTA : DEMO_FILE_DELTA;
             int LoopCount = IS_PRODUCT ? PROD_FILE_LOOP : DEMO_FILE_LOOP;
 
-			string OutputPath = Path.Combine(ArchiveOutputDirectoryPath, CurrentFile.FileName).Replace("\\", Path.DirectorySeparatorChar.ToString());
+			string OutputPath = Path.Combine(ArchiveOutputDirectoryPath, CurrentFile.FileName).Replace('\\', Path.DirectorySeparatorChar);
 			string OutputDirectory = Path.GetDirectoryName(OutputPath);
 
 			if (!Directory.Exists(OutputDirectory))
@@ -270,21 +267,20 @@ namespace S7Packer.Source
 			}
 
             using BinaryWriter Writer = new(File.OpenWrite(OutputPath));
-            uint StoredSize = Definition.FileType == (uint)BBAArchiveFileType.TEA
-                ? (Definition.CompressedFileSize + 3) & ~3u
-                : Definition.CompressedFileSize;
+            uint StoredSize = Definition.FileType == (uint)BBAArchiveDataEntryType.TEA
+                ? (Definition.CompressedFileSize + 3) & ~3u : Definition.CompressedFileSize;
             byte[] Source = GlobalArchiveReader.ReadBytes((int)StoredSize);
 
             switch (Definition.FileType)
             {
-				case (uint)BBAArchiveFileType.Compressed:
+				case (uint)BBAArchiveDataEntryType.Compressed:
 				{
 					Console.WriteLine("[ZLIB] Name: " + CurrentFile.FileName);
 					for (int Offset = 0; Offset < Source.Length; Offset += ONE_MIB)
 					{
 						int ChunkSize = Math.Min(ONE_MIB, Source.Length - Offset);
 						Span<byte> Chunk = Source.AsSpan(Offset, ChunkSize);
-                            Crypt.DecryptCompressedFile(Chunk, Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
+                        Crypt.DecryptCompressedFile(Chunk, Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
 					}
 
 					using MemoryStream Memory = new(Source);
@@ -292,7 +288,7 @@ namespace S7Packer.Source
 					GZip.CopyTo(Writer.BaseStream);
 					break;
 				}
-                case (uint)BBAArchiveFileType.TEA:
+                case (uint)BBAArchiveDataEntryType.TEA:
 				{
 					Console.WriteLine("[TEA] Name: " + CurrentFile.FileName);
                     Crypt.HandleTEAFile(Source, Definition.FileNameLength, Definition.BlockSize, Delta, LoopCount, false);
@@ -375,7 +371,7 @@ namespace S7Packer.Source
 					Count = uint.MaxValue;
 				}
 
-				if (Definition.FileType != 256) // Directory
+				if (Definition.FileType != (uint)BBAArchiveDataEntryType.Directory)
 				{
 					Definition.FileOffset = Size;
 					Definition.NextFileOffset = Count;
@@ -455,7 +451,7 @@ namespace S7Packer.Source
 			return Result.Serialize();
 		}
 
-		private static BBADataEntry SetupBBADataEntry(string BasePath, string FilePath, BBAArchiveFileType FileType)
+		private static BBADataEntry SetupBBADataEntry(string BasePath, string FilePath, BBAArchiveDataEntryType FileType)
 		{
 			BBADataEntry BBAFile = new(default);
 			ref BBADataEntryDefinition Definition = ref BBAFile.GetDefinition();
@@ -477,7 +473,7 @@ namespace S7Packer.Source
 
 		private BBADataEntry CreateBBAFileWithoutCompression(string BasePath, string CurrentPath, BinaryWriter Writer)
 		{
-			BBADataEntry curFile = SetupBBADataEntry(BasePath, CurrentPath, BBAArchiveFileType.None);
+			BBADataEntry curFile = SetupBBADataEntry(BasePath, CurrentPath, BBAArchiveDataEntryType.None);
 			ref BBADataEntryDefinition Definition = ref curFile.GetDefinition();
             using FileStream Input = File.OpenRead(CurrentPath);
             Crc32 CRC = new();
@@ -502,9 +498,71 @@ namespace S7Packer.Source
             return curFile;
         }
 
+		private BBADataEntry CreateBBAFileWithTEAEncryption(string BasePath, string CurrentPath, BinaryWriter Writer)
+		{
+			BBADataEntry curFile = SetupBBADataEntry(BasePath, CurrentPath, BBAArchiveDataEntryType.TEA);
+			ref BBADataEntryDefinition Definition = ref curFile.GetDefinition();
+			using FileStream Input = File.OpenRead(CurrentPath);
+
+			uint Delta = IS_PRODUCT ? PROD_FILE_DELTA : DEMO_FILE_DELTA;
+			int LoopCount = IS_PRODUCT ? PROD_FILE_LOOP : DEMO_FILE_LOOP;
+			Crc32 DecompressedCRC = new();
+			Crc32 CompressedCRC = new();
+			byte[] Buffer = new byte[ONE_MIB];
+			long TotalLength = 0;
+			long StoredLength = 0;
+
+			while (true)
+			{
+				int BytesRead = 0;
+				while (BytesRead < Buffer.Length)
+				{
+					int Read = Input.Read(Buffer, BytesRead, Buffer.Length - BytesRead);
+					if (Read == 0)
+					{
+						break;
+					}
+
+					BytesRead += Read;
+				}
+
+				if (BytesRead == 0)
+				{
+					break;
+				}
+
+				DecompressedCRC.Append(Buffer.AsSpan(0, BytesRead));
+				TotalLength += BytesRead;
+
+				if (BytesRead == Buffer.Length)
+				{
+					Crypt.HandleTEAFile(Buffer, Definition.FileNameLength, ONE_MIB, Delta, LoopCount, true);
+					CompressedCRC.Append(Buffer);
+					Writer.Write(Buffer);
+					StoredLength += Buffer.Length;
+					continue;
+				}
+
+				int PaddedLength = (BytesRead + 3) & ~3;
+				byte[] FinalBlock = new byte[PaddedLength];
+				Buffer.AsSpan(0, BytesRead).CopyTo(FinalBlock);
+				Crypt.HandleTEAFile(FinalBlock, Definition.FileNameLength, ONE_MIB, Delta, LoopCount, true);
+				CompressedCRC.Append(FinalBlock);
+				Writer.Write(FinalBlock);
+				StoredLength += FinalBlock.Length;
+				break;
+			}
+
+			Definition.DecompressedFileSize = (uint)TotalLength;
+			Definition.CompressedFileSize = (uint)StoredLength;
+			Definition.DecompressedCrc32 = DecompressedCRC.GetCurrentHashAsUInt32();
+			Definition.CompressedCrc32 = CompressedCRC.GetCurrentHashAsUInt32();
+			return curFile;
+		}
+
 		private BBADataEntry CreateBBAFileWithZLIBCompression(string BasePath, string CurrentPath, BinaryWriter Writer)
 		{
-			BBADataEntry bbaFile = SetupBBADataEntry(BasePath, CurrentPath, BBAArchiveFileType.Compressed);
+			BBADataEntry bbaFile = SetupBBADataEntry(BasePath, CurrentPath, BBAArchiveDataEntryType.Compressed);
 			ref BBADataEntryDefinition Definition = ref bbaFile.GetDefinition();
 
 			using FileStream Input = File.OpenRead(CurrentPath);
@@ -553,7 +611,7 @@ namespace S7Packer.Source
 			BBAFile.FileName = Name;
 			Definition.FileNameLength = (uint)Name.Length;
 			Definition.FileNameOffset = 0;
-			Definition.FileType = 256;
+			Definition.FileType = (uint)BBAArchiveDataEntryType.Directory;
 			Definition.DecompressedFileSize = 0;
 			Definition.DecompressedCrc32 = 0;
 			Definition.CompressedFileSize = 0;
@@ -576,38 +634,40 @@ namespace S7Packer.Source
 		private List<BBADataEntry> GetFileInfo(uint[] Data)
 		{
 			List<BBADataEntry> Result = [];
-
-			uint HeaderSizeWithoutFileName = HEADER_SIZE;
-			uint curFileNameLength = 0;
-
-			int FileIndex = 1;
-			int curEntryStartIndex = (int)HEADER_START_OFFSET;
-			int curEntryLength = 0;
-			int DataIndex = (int)HEADER_START_OFFSET;
-
-			for (; DataIndex < Data.Length; DataIndex++, FileIndex++, curEntryLength++)
+			if (Data.Length <= HEADER_START_OFFSET)
 			{
-				if (FileIndex == FILE_NAME_NUM)
+				return Result;
+			}
+
+			int EntryStart = (int)HEADER_START_OFFSET;
+			uint FileNameLength = 0;
+
+			for (int DataIndex = (int)HEADER_START_OFFSET, FieldIndex = 1; DataIndex < Data.Length; DataIndex++, FieldIndex++)
+			{
+				if (FieldIndex == FILE_NAME_NUM)
 				{
 					if (Data[DataIndex] == 0)
 					{
 						break;
 					}
 
-					curFileNameLength = (Data[DataIndex] + 3u) >> 2;
+					FileNameLength = (Data[DataIndex] + 3u) >> 2;
+					continue;
 				}
-				else if (FileIndex > HeaderSizeWithoutFileName && (FileIndex - HeaderSizeWithoutFileName) > curFileNameLength)
+
+				if (FieldIndex > HEADER_SIZE && (FieldIndex - HEADER_SIZE) > FileNameLength)
 				{
-					Result.Add(new BBADataEntry(Data.AsSpan(curEntryStartIndex, curEntryLength)));
-					ref BBADataEntryDefinition Definition = ref Result[^1].GetDefinition();
+					int EntryLength = DataIndex - EntryStart;
+					BBADataEntry Entry = new(Data.AsSpan(EntryStart, EntryLength));
+					ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
+					Result.Add(Entry);
 
-					FileIndex = (Definition.FileNameLength % 4 == 0) ? 0 : 1;
-					curEntryStartIndex = DataIndex + (FileIndex == 0 ? 1 : 0);
-					curEntryLength = 0;
+					FieldIndex = (Definition.FileNameLength % 4 == 0) ? 0 : 1;
+					EntryStart = DataIndex + (FieldIndex == 0 ? 1 : 0);
+					FileNameLength = 0;
 
-					string Extension = Path.GetExtension(Result[^1].FileName).ToLowerInvariant();
-					if (FileTypeExtensions.TryGetValue((BBAArchiveFileType)Definition.FileType, out List<string> Extensions)
-						&& !string.IsNullOrEmpty(Extension))
+					string Extension = Path.GetExtension(Entry.FileName).ToLowerInvariant();
+					if (!string.IsNullOrEmpty(Extension) && FileTypeExtensions.TryGetValue((BBAArchiveDataEntryType)Definition.FileType, out List<string> Extensions))
 					{
 						bool HasExtension = false;
 						for (int i = 0; i < Extensions.Count; i++)

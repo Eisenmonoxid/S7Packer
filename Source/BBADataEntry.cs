@@ -4,6 +4,14 @@ using System.Text;
 
 namespace S7Packer.Source
 {
+	public enum BBAArchiveDataEntryType : uint
+	{
+		TEA = 2,
+		Compressed = 17,
+		Directory = 256,
+		None = 0
+	}
+
 	[StructLayout(LayoutKind.Sequential, Pack = 4)]
 	public struct BBADataEntryDefinition
 	{
@@ -72,7 +80,7 @@ namespace S7Packer.Source
 
 			ReadOnlySpan<byte> Name = MemoryMarshal.Cast<uint, byte>(Data[16..]);
 			int Length = (int)Definition.FileNameLength;
-			FileName = Encoding.ASCII.GetString(Name.Slice(0, Length)).TrimEnd('\0');
+			FileName = Encoding.ASCII.GetString(Name[..Length]).TrimEnd('\0');
 		}
 
 		public byte[] Serialize()

@@ -33,6 +33,7 @@ namespace S7Packer.Source
 	{
 		private BBADirectoryDefinition Definition;
 		public ref BBADirectoryDefinition GetDefinition() => ref Definition;
+		public byte[] Serialize() => Utility.Serialize(Definition);
 
 		private static long CombineEncryptionIdentifier(uint A, uint B)
 		{
@@ -85,7 +86,5 @@ namespace S7Packer.Source
 				};
 			}
 		}
-
-		public byte[] Serialize() => Utility.Serialize(Definition);
 	}
 }

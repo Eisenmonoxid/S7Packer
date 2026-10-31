@@ -19,14 +19,13 @@ namespace S7Packer.Source
 	{
 		private BBADirectoryHeaderDefinition Definition;
 		public ref BBADirectoryHeaderDefinition GetDefinition() => ref Definition;
+		public byte[] Serialize() => Utility.Serialize(Definition);
 
 		private static long GetEncryptionIdentifier(uint Lower, uint Upper)
 		{
 			ulong Combined = ((ulong)Lower << 32) | Upper;
 			return unchecked((long)Combined);
 		}
-
-		public byte[] Serialize() => Utility.Serialize(Definition);
 
 		public BBADirectoryHeader(ReadOnlySpan<uint> Data) // Data Length = 16
 		{
