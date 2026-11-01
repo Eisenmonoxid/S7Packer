@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace S7Packer.Source
 {
-	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	[StructLayout(LayoutKind.Sequential, Pack = 1)]
 	public struct BBADirectoryHeaderDefinition
 	{
 		public uint OffsetLow;

@@ -12,7 +12,7 @@ namespace S7Packer.Source
 		None = 0
 	}
 
-	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	[StructLayout(LayoutKind.Sequential, Pack = 1)]
 	public struct BBADataEntryDefinition
 	{
 		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]

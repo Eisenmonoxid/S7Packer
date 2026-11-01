@@ -384,7 +384,7 @@ namespace S7Packer.Source
 				}
 
 				Size += Definition.CompressedFileSize;
-				Result.AddRange(FileData);
+				Result.AddRange(curFile.Serialize());
 				Console.WriteLine("[PACKED] Name: " + curFile.FileName);
 			}
 
