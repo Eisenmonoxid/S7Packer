@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -6,32 +7,39 @@ namespace S7Packer.Source
 {
 	public static class Crypt
     {
+		private static readonly uint[] PROD_XOR = [68040748, 166934560, 1719695735, 4247314248];
+		private static readonly uint[] DEMO_XOR = [780972269, 3538276439, 2864783426, 3237865163];
+
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static uint FEISTEL(uint y, uint z, uint Sum, uint Key)
 		{
-			uint lhs = (y >> 5) ^ (z << 2);
-			uint rhs = (y << 4) ^ (z >> 3);
-			return (lhs + rhs) ^ ((Sum ^ z) + (Key ^ y));
+			uint LHS = (y >> 5) ^ (z << 2);
+			uint RHS = (y << 4) ^ (z >> 3);
+			return (LHS + RHS) ^ ((Sum ^ z) + (Key ^ y));
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
-		public static void DecryptCompressedFile(Span<byte> Data, uint FileNameLength, uint[] XOR)
+		public static void DecryptCompressedChunk(Span<byte> Data, uint FileNameLength, bool IsProduct)
 		{
+			ReadOnlySpan<uint> XOR = IsProduct ? PROD_XOR : DEMO_XOR;
 			Span<uint> Input = MemoryMarshal.Cast<byte, uint>(Data);
-			Input[3] ^= Input[2] ^ FileNameLength ^ XOR[3];
-			Input[2] ^= Input[1] ^ FileNameLength ^ XOR[2];
-			Input[1] ^= Input[0] ^ FileNameLength ^ XOR[1];
-			Input[0] ^= Input[3] ^ FileNameLength ^ XOR[0];
+
+			for (int i = 3; i >= 0; i--)
+			{
+				Input[i] ^= Input[(i + 3) & 3] ^ FileNameLength ^ XOR[i];
+			}
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
-		public static void EncryptCompressedFile(Span<byte> Data, uint FileNameLength, uint[] XOR)
+		public static void EncryptCompressedChunk(Span<byte> Data, uint FileNameLength, bool IsProduct)
 		{
+			ReadOnlySpan<uint> XOR = IsProduct ? PROD_XOR : DEMO_XOR;
 			Span<uint> Input = MemoryMarshal.Cast<byte, uint>(Data);
-			Input[0] ^= Input[3] ^ FileNameLength ^ XOR[0];
-			Input[1] ^= Input[0] ^ FileNameLength ^ XOR[1];
-			Input[2] ^= Input[1] ^ FileNameLength ^ XOR[2];
-			Input[3] ^= Input[2] ^ FileNameLength ^ XOR[3];
+			
+			for (int i = 0; i < 4; i++)
+			{
+				Input[i] ^= Input[(i + 3) & 3] ^ FileNameLength ^ XOR[i];
+			}
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveOptimization)]

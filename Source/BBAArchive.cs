@@ -11,7 +11,6 @@ namespace S7Packer.Source
 {
 	internal class BBAArchiveFile
     {
-		private const int FILE_NAME_NUM = 13;
 		private const int ONE_MIB = 1048576;
 		private const uint PROD_HEAD_DELTA = 1231853475;
 		private const int PROD_HEAD_LOOP = 7;
@@ -23,8 +22,6 @@ namespace S7Packer.Source
 		private const int DEMO_FILE_LOOP = 9;
 		private const uint HEADER_START_OFFSET = 69;
 		private const uint HEADER_SIZE = 16;
-		private static readonly uint[] PROD_XOR = [68040748, 166934560, 1719695735, 4247314248];
-		private static readonly uint[] DEMO_XOR = [780972269, 3538276439, 2864783426, 3237865163];
 		// ------------------------------------------------------------ \\
 		private readonly FileStream ArchiveFileStream;
 		private readonly string ArchiveOutputDirectoryPath;
@@ -57,7 +54,7 @@ namespace S7Packer.Source
 			{
 				CurrentBBADirectoryHeader = ParseBBADirectoryHeaderFromFile(GlobalArchiveReader);
 				GlobalDirectory = GetDirectoryInfo(CurrentBBADirectoryHeader);
-				GlobalFileData = GetFileInfo(CurrentBBADirectoryHeader);
+				GlobalFileData = ParseDataEntryArrayFromArchive(CurrentBBADirectoryHeader, GlobalDirectory.GetDefinition().NumberOfFiles);
 
 				GlobalHashTableInfo = GetArchiveFileHashTable(CurrentBBADirectoryHeader, GlobalDirectory, GlobalFileData);
 				GlobalHashTableIndex = GetArchiveFileHashTableIndex(GlobalHashTableInfo);
@@ -247,7 +244,7 @@ namespace S7Packer.Source
 
 		private bool ExtractFileFromArchive(BBADataEntry CurrentFile)
 		{
-			BBADataEntryDefinition Definition = CurrentFile.GetDefinition();
+			ref BBADataEntryDefinition Definition = ref CurrentFile.GetDefinition();
 			GlobalArchiveReader.BaseStream.Position = Definition.FileOffset;
 
 			uint Delta = IS_PRODUCT ? PROD_FILE_DELTA : DEMO_FILE_DELTA;
@@ -266,7 +263,18 @@ namespace S7Packer.Source
 				return true;
 			}
 
-            using BinaryWriter Writer = new(File.OpenWrite(OutputPath));
+            FileStream WriteStream;
+            try
+			{
+				WriteStream = File.OpenWrite(OutputPath);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine("[ERROR] Could not open file for writing: " + OutputPath + "\n" + ex.Message);
+				return false;
+			}
+
+            using BinaryWriter Writer = new(WriteStream);
             uint StoredSize = Definition.FileType == (uint)BBAArchiveDataEntryType.TEA
                 ? (Definition.CompressedFileSize + 3) & ~3u : Definition.CompressedFileSize;
             byte[] Source = GlobalArchiveReader.ReadBytes((int)StoredSize);
@@ -280,7 +288,7 @@ namespace S7Packer.Source
 					{
 						int ChunkSize = Math.Min(ONE_MIB, Source.Length - Offset);
 						Span<byte> Chunk = Source.AsSpan(Offset, ChunkSize);
-                        Crypt.DecryptCompressedFile(Chunk, Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
+						Crypt.DecryptCompressedChunk(Chunk, Definition.FileNameLength, IS_PRODUCT);
 					}
 
 					using MemoryStream Memory = new(Source);
@@ -587,8 +595,8 @@ namespace S7Packer.Source
 
 			while ((bytesRead = CompressedBuffer.Read(outputBuffer, 0, outputBuffer.Length)) > 0)
 			{
-				byte[] curBlock = outputBuffer[..bytesRead];
-                Crypt.EncryptCompressedFile(curBlock.AsSpan(), Definition.FileNameLength, IS_PRODUCT ? PROD_XOR : DEMO_XOR);
+				Span<byte> curBlock = outputBuffer.AsSpan(0, bytesRead);
+				Crypt.EncryptCompressedChunk(curBlock, Definition.FileNameLength, IS_PRODUCT);
 
 				CompressedCRC.Append(curBlock);
 				Writer.Write(curBlock);
@@ -631,60 +639,31 @@ namespace S7Packer.Source
 			return new BBADirectory(Current);
 		}
 
-		private List<BBADataEntry> GetFileInfo(uint[] Data)
+		private void UpdateFileTypeExtensions(BBADataEntry File)
+		{
+			string Extension = Path.GetExtension(File.FileName).ToLowerInvariant();
+			BBAArchiveDataEntryType FileType = (BBAArchiveDataEntryType)File.GetDefinition().FileType;
+
+			if (!string.IsNullOrEmpty(Extension) &&
+				FileTypeExtensions.TryGetValue(FileType, out List<string> Extensions) &&
+				!Extensions.Contains(Extension))
+			{
+				Extensions.Add(Extension);
+			}
+		}
+
+		private List<BBADataEntry> ParseDataEntryArrayFromArchive(ReadOnlySpan<uint> Data, uint AmountOfFiles)
 		{
 			List<BBADataEntry> Result = [];
-			if (Data.Length <= HEADER_START_OFFSET)
+			
+			int DataIndex = (int)HEADER_START_OFFSET;
+			for (uint i = 0; i < AmountOfFiles; i++)
 			{
-				return Result;
-			}
+				BBADataEntry Entry = new(Data[DataIndex .. Data.Length]);
+				Result.Add(Entry);
+				UpdateFileTypeExtensions(Entry);
 
-			int EntryStart = (int)HEADER_START_OFFSET;
-			uint FileNameLength = 0;
-
-			for (int DataIndex = (int)HEADER_START_OFFSET, FieldIndex = 1; DataIndex < Data.Length; DataIndex++, FieldIndex++)
-			{
-				if (FieldIndex == FILE_NAME_NUM)
-				{
-					if (Data[DataIndex] == 0)
-					{
-						break;
-					}
-
-					FileNameLength = (Data[DataIndex] + 3u) >> 2;
-					continue;
-				}
-
-				if (FieldIndex > HEADER_SIZE && (FieldIndex - HEADER_SIZE) > FileNameLength)
-				{
-					int EntryLength = DataIndex - EntryStart;
-					BBADataEntry Entry = new(Data.AsSpan(EntryStart, EntryLength));
-					ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
-					Result.Add(Entry);
-
-					FieldIndex = (Definition.FileNameLength % 4 == 0) ? 0 : 1;
-					EntryStart = DataIndex + (FieldIndex == 0 ? 1 : 0);
-					FileNameLength = 0;
-
-					string Extension = Path.GetExtension(Entry.FileName).ToLowerInvariant();
-					if (!string.IsNullOrEmpty(Extension) && FileTypeExtensions.TryGetValue((BBAArchiveDataEntryType)Definition.FileType, out List<string> Extensions))
-					{
-						bool HasExtension = false;
-						for (int i = 0; i < Extensions.Count; i++)
-						{
-							if (string.Equals(Extensions[i], Extension, StringComparison.OrdinalIgnoreCase))
-							{
-								HasExtension = true;
-								break;
-							}
-						}
-
-						if (!HasExtension)
-						{
-							Extensions.Add(Extension);
-						}
-					}
-				}
+				DataIndex += Entry.GetFullSizeWithPadding() / sizeof(uint);
 			}
 
 			return Result;

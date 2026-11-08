@@ -12,7 +12,7 @@ namespace S7Packer.Source
 		None = 0
 	}
 
-	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
 	public struct BBADataEntryDefinition
 	{
 		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
@@ -42,6 +42,7 @@ namespace S7Packer.Source
 		private BBADataEntryDefinition Definition;
 		public ref BBADataEntryDefinition GetDefinition() => ref Definition;
 		public string FileName;
+		public static uint Size => (uint)Marshal.SizeOf<BBADataEntryDefinition>();
 
 		public static uint[] GetTimeStamp(DateTime Date)
 		{
@@ -98,6 +99,17 @@ namespace S7Packer.Source
 			Array.Resize(ref Result, NewSize);
 			Name.CopyTo(Result, Size);
 			return Result;
+		}
+
+		public int GetFullSizeWithPadding()
+		{
+			int FileNameSize = (int)((Definition.FileNameLength + 3) & ~3);
+			if (Definition.FileNameLength % 4 == 0)
+			{
+				FileNameSize += 4;
+			}
+
+			return (int)(Size + FileNameSize);
 		}
 	}
 }
