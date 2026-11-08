@@ -53,13 +53,8 @@ namespace S7Packer.Source
 			];
 		}
 
-		public BBADataEntry(ReadOnlySpan<uint> Data, DateTime Date = default) // Data.Length >= 17
+		public BBADataEntry(ReadOnlySpan<uint> Data, DateTime Date = default)
 		{
-			if (Data.IsEmpty)
-			{
-				return;
-			}
-
 			Definition = new BBADataEntryDefinition
 			{
 				TimeStamp = Date != default ? GetTimeStamp(Date) : [Data[0], Data[1]],
@@ -86,19 +81,8 @@ namespace S7Packer.Source
 
 		public byte[] Serialize()
 		{
-			byte[] Name = Encoding.ASCII.GetBytes(FileName);
-			byte[] Result = Utility.Serialize(Definition);
-			int Size = Result.Length;
-			int NewSize = Size + ((Name.Length + 3) & ~3);
-
-			if (Definition.FileNameLength % 4 == 0)
-			{
-				NewSize += 4;
-			}
-
-			Array.Resize(ref Result, NewSize);
-			Name.CopyTo(Result, Size);
-			return Result;
+			Definition.FileNameLength = (uint)FileName.Length;
+			return Utility.Serialize(Definition, GetFullSizeWithPadding());
 		}
 
 		public int GetFullSizeWithPadding()

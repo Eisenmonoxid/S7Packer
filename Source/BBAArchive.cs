@@ -26,7 +26,8 @@ namespace S7Packer.Source
 		private readonly FileStream ArchiveFileStream;
 		private readonly string ArchiveOutputDirectoryPath;
 		private readonly BinaryReader GlobalArchiveReader;
-		private readonly List<BBAFileHashTableEntry> GlobalHashTableInfo;
+		// private readonly List<BBAFileHashTableEntry> GlobalHashTableInfo;
+		private readonly BBAFileHashTable GlobalHashTable;
 		private readonly List<BBADataEntry> GlobalFileData;
 		private readonly Dictionary<string, int> GlobalHashTableIndex; // File Name, Index
 		private readonly BBADirectory GlobalDirectory;
@@ -128,12 +129,12 @@ namespace S7Packer.Source
 			return MemoryMarshal.Cast<byte, uint>(Bytes.AsSpan()).ToArray();
         }
 
-		private static List<BBAFileHashTableEntry> GetArchiveFileHashTable(uint[] DirectoryHeader, BBADirectory Directory, List<BBADataEntry> FileData)
+		private static void ParseHashTable(uint[] DirectoryHeader, BBADirectory Directory, List<BBADataEntry> FileData)
 		{
-			int HashTableStartIndex = (int)Directory.GetDefinition().OffsetFileHashtable / 4;
+			int HashTableStartIndex = (int)Directory.GetDefinition().OffsetFileHashtable / sizeof(uint);
 			uint[] Destination = new uint[DirectoryHeader[HashTableStartIndex] * 2];
 			Array.Copy(DirectoryHeader, HashTableStartIndex + 1, Destination, 0, Destination.Length);
-			return BBAFileHashTableEntry.GetBBAFileHashTable(Destination, FileData);
+			return BBAFileHashTable.ParseHashTableFromHeader(Destination);
 		}
 
 		private static Dictionary<string, int> GetArchiveFileHashTableIndex(List<BBAFileHashTableEntry> Info)

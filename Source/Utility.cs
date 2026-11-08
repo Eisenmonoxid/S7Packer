@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Hashing;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace S7Packer.Source
@@ -34,22 +36,23 @@ namespace S7Packer.Source
 			return Files;
 		}
 
-		public static byte[] Serialize<T>(T Value) where T : struct
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static byte[] Serialize<T>(in T Struct, int Size = 0) where T : struct
 		{
-			int Size = Marshal.SizeOf<T>();
-			byte[] Buffer = new byte[Size];
-			IntPtr Pointer = Marshal.AllocHGlobal(Size);
+			byte[] Buffer = new byte[Size == 0 ? Marshal.SizeOf<T>() : Size];
+			MemoryMarshal.Write(Buffer, in Struct);
+			return Buffer;
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static int GetSerializedSize<T>() where T : struct => Marshal.SizeOf<T>();
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static ref readonly T Parse<T>(ReadOnlySpan<byte> Buffer) where T : struct => ref MemoryMarshal.AsRef<T>(Buffer);
 
-			try
-			{
-				Marshal.StructureToPtr(Value, Pointer, false);
-				Marshal.Copy(Pointer, Buffer, 0, Size);
-				return Buffer;
-			}
-			finally
-			{
-				Marshal.FreeHGlobal(Pointer);
-			}
+		public static UInt32 GetCRC32OfData(ReadOnlySpan<byte> Data)
+		{
+			Crc32 CRC = new();
+			CRC.Append(Data);
+			return CRC.GetCurrentHashAsUInt32();
 		}
 
 		public static string SanitizePath(string Base, string Result)
