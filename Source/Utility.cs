@@ -39,7 +39,7 @@ namespace S7Packer.Source
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static byte[] Serialize<T>(in T Struct, int Size = 0) where T : struct
 		{
-			byte[] Buffer = new byte[Size == 0 ? Marshal.SizeOf<T>() : Size];
+			byte[] Buffer = new byte[Size == 0 ? GetSerializedSize<T>() : Size];
 			MemoryMarshal.Write(Buffer, in Struct);
 			return Buffer;
 		}

@@ -18,7 +18,7 @@ namespace S7Packer.Source
 		private readonly BBAArchiveHashTableEntryDefinition[] HashTableData = new BBAArchiveHashTableEntryDefinition[AmountOfHashTableEntries];
 		public uint TotalSize => AmountOfHashTableEntries;
 
-		public void ParseHashTableFromHeader(ReadOnlySpan<byte> Data)
+		public BBAFileHashTable ParseHashTableFromHeader(ReadOnlySpan<byte> Data)
 		{
 			int HashTableEntryOffset = 0;
 			int Size = Utility.GetSerializedSize<BBAArchiveHashTableEntryDefinition>();
@@ -29,7 +29,10 @@ namespace S7Packer.Source
 
 				HashTableEntryOffset += Size;
 			}
+
+			return this;
 		}
+
 		public Span<byte> SerializeHashTable(List<BBADataEntry> Files)
 		{
 			uint Mask = AmountOfHashTableEntries - 1;
@@ -55,9 +58,9 @@ namespace S7Packer.Source
 			return MemoryMarshal.AsBytes(HashTableData.AsSpan());
 		}
 		
-		public void LinkHashTableEntriesToDataEntries(Span<BBADataEntry> GlobalFileData)
+		public void LinkHashTableEntriesToDataEntries(List<BBADataEntry> GlobalFileData)
 		{
-			for (int i = 0; i < GlobalFileData.Length; i++)
+			for (int i = 0; i < GlobalFileData.Count; i++)
 			{
 				BBADataEntry DataEntry = GlobalFileData[i];
 				byte[] FileNameData = Encoding.ASCII.GetBytes(DataEntry.FileName);

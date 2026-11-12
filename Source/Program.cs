@@ -73,17 +73,19 @@ namespace S7Packer.Source
             if (Folder == default)
             {
                 Console.WriteLine("[INFO] Unpacking archive file " + Stream.Name);
-                Result = Archive.UnpackBBAArchiveFiles();
+                Result = Archive.ExtractAllFilesFromArchive();
             }
             else
             {
                 Console.WriteLine("[INFO] Packing folder content " + Folder + " to archive file " + Stream.Name);
-                Result = Archive.AddFolderFilesToArchive(Folder);
+                Result = Archive.CreateArchiveFileByFolder(Folder);
             }
             Watch.Stop();
 
             Console.WriteLine("[INFO] Operation took " + Watch.ElapsedMilliseconds + " ms.");
 			return Result;
+
+            return true;
 		}
 
 		static FileStream GetFileStream(string[] args)

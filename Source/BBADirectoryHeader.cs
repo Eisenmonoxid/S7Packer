@@ -3,16 +3,15 @@ using System.Runtime.InteropServices;
 
 namespace S7Packer.Source
 {
-	[StructLayout(LayoutKind.Sequential, Pack = 1)]
-	public struct BBADirectoryHeaderDefinition
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	public unsafe struct BBADirectoryHeaderDefinition
 	{
 		public uint OffsetLow;
 		public uint OffsetHigh;
 		public uint Length;
 		public uint CRC32;
-		public long EncryptionIdentifier;
-		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 40)]
-		public byte[] Reserved;
+		public long EncryptionID;
+		public fixed byte Reserved[40];
 	}
 
 	internal class BBADirectoryHeader
@@ -20,6 +19,7 @@ namespace S7Packer.Source
 		private BBADirectoryHeaderDefinition Definition;
 		public ref BBADirectoryHeaderDefinition GetDefinition() => ref Definition;
 		public byte[] Serialize() => Utility.Serialize(Definition);
+		public static uint Size => (uint)Marshal.SizeOf<BBADirectoryHeaderDefinition>(); // 64
 
 		private static long GetEncryptionIdentifier(uint Lower, uint Upper)
 		{
@@ -27,16 +27,20 @@ namespace S7Packer.Source
 			return unchecked((long)Combined);
 		}
 
-		public BBADirectoryHeader(ReadOnlySpan<uint> Data) // Data Length = 16
+		public BBADirectoryHeader(ReadOnlySpan<byte> Data)
+		{
+			Definition = Utility.Parse<BBADirectoryHeaderDefinition>(Data);
+		}
+
+		public BBADirectoryHeader(BBAHeader Header, uint FileLength, uint HeaderLength, uint CRC32)
 		{
 			Definition = new BBADirectoryHeaderDefinition
 			{
-				OffsetLow = Data[0],
-				OffsetHigh = Data[1],
-				Length = Data[2] == 0 ? 16u : Data[2],
-				CRC32 = Data[3],
-				EncryptionIdentifier = (Data[4] == 0 || Data[5] == 0) ? -2151081698912143722L : GetEncryptionIdentifier(Data[4], Data[5]),
-				Reserved = new byte[40],
+				OffsetLow = BBAHeader.Size + Header.GetDefinition().Size + FileLength,
+				OffsetHigh = 0,
+				Length = HeaderLength,
+				CRC32 = CRC32,
+				EncryptionID = Crypt.S7_DIRECTORY_CRYPTID,
 			};
 		}
 	}

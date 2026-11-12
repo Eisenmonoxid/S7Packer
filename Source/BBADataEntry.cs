@@ -13,27 +13,23 @@ namespace S7Packer.Source
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 4)]
-	public struct BBADataEntryDefinition
+	public unsafe struct BBADataEntryDefinition
 	{
-		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
-		public uint[] TimeStamp;
-		public uint DecompressedFileSize;
-		public uint DecompressedCrc32;
-		public uint FileType;
-		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
-		public byte[] Padding1;
-		public uint FileOffset;
-		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
-		public byte[] Padding2;
-		public uint CompressedFileSize;
-		public uint CompressedCrc32;
-		public uint BlockSize;
-		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
-		public byte[] Padding3;
-		public uint FileNameLength;
-		public uint FileNameOffset;
-		public uint NextDirectoryOffset;
-		public uint NextFileOffset;
+		public UInt64 TimeStamp;
+		public UInt32 DecompressedFileSize;
+		public UInt32 DecompressedCRC32;
+		public UInt32 FileType;
+		public fixed byte Padding[4];
+		public UInt32 FileOffset;
+		public fixed byte Padding1[4];
+		public UInt32 CompressedFileSize;
+		public UInt32 CompressedCRC32;
+		public UInt32 BlockSize;
+		public fixed byte Padding2[4];
+		public UInt32 FileNameLength;
+		public UInt32 FileNameOffset;
+		public Int32 FirstChild;
+		public Int32 NextSibling;
 		// string FileName follows (dynamic length)
 	}
 
@@ -53,30 +49,10 @@ namespace S7Packer.Source
 			];
 		}
 
-		public BBADataEntry(ReadOnlySpan<uint> Data, DateTime Date = default)
+		public BBADataEntry(ReadOnlySpan<byte> Data)
 		{
-			Definition = new BBADataEntryDefinition
-			{
-				TimeStamp = Date != default ? GetTimeStamp(Date) : [Data[0], Data[1]],
-				DecompressedFileSize = Data[2],
-				DecompressedCrc32 = Data[3],
-				FileType = Data[4],
-				Padding1 = new byte[4],
-				FileOffset = Data[6],
-				Padding2 = new byte[4],
-				CompressedFileSize = Data[8],
-				CompressedCrc32 = Data[9],
-				BlockSize = Data[10],
-				Padding3 = new byte[4],
-				FileNameLength = Data[12],
-				FileNameOffset = Data[13],
-				NextDirectoryOffset = Data[14],
-				NextFileOffset = Data[15],
-			};
-
-			ReadOnlySpan<byte> Name = MemoryMarshal.Cast<uint, byte>(Data[16..]);
-			int Length = (int)Definition.FileNameLength;
-			FileName = Encoding.ASCII.GetString(Name[..Length]).TrimEnd('\0');
+			Definition = Utility.Parse<BBADataEntryDefinition>(Data);
+			FileName = Encoding.ASCII.GetString(Data[(int)Size .. (int)(Size + Definition.FileNameLength)]).TrimEnd('\0');
 		}
 
 		public byte[] Serialize()

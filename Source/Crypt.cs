@@ -7,6 +7,10 @@ namespace S7Packer.Source
 {
 	public static class Crypt
     {
+		public const UInt32 S7_HEAD_CRYPTID = 0x6D1A8389;
+		public const Int64 S7_DIRECTORY_CRYPTID = -0x1DDA2D688280896A;
+		public const Int64 S7_FILE_CRYPTID = 0x7D7F7696E225D282;
+
 		private static readonly uint[] PROD_XOR = [68040748, 166934560, 1719695735, 4247314248];
 		private static readonly uint[] DEMO_XOR = [780972269, 3538276439, 2864783426, 3237865163];
 
