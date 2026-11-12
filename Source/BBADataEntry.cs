@@ -54,8 +54,12 @@ namespace S7Packer.Source
 
 		public byte[] Serialize()
 		{
-			Definition.FileNameLength = (uint)FileName.Length;
-			return Utility.Serialize(Definition, GetFullSizeWithPadding());
+			byte[] FileNameData = Encoding.ASCII.GetBytes(FileName);
+			Definition.FileNameLength = (uint)FileNameData.Length;
+
+			byte[] Data = Utility.Serialize(Definition, GetFullSizeWithPadding());
+			FileNameData.CopyTo(Data, (int)Size);
+			return Data;
 		}
 
 		public int GetFullSizeWithPadding()

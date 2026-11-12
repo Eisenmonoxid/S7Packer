@@ -84,8 +84,6 @@ namespace S7Packer.Source
 
             Console.WriteLine("[INFO] Operation took " + Watch.ElapsedMilliseconds + " ms.");
 			return Result;
-
-            return true;
 		}
 
 		static FileStream GetFileStream(string[] args)
