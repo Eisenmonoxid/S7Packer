@@ -39,20 +39,17 @@ namespace S7Packer.Source
 		public ref BBADataEntryDefinition GetDefinition() => ref Definition;
 		public string FileName;
 		public static uint Size => (uint)Marshal.SizeOf<BBADataEntryDefinition>();
-
-		public static uint[] GetTimeStamp(DateTime Date)
-		{
-			ulong Ticks = (ulong)Date.Ticks;
-			return [
-				(uint)(Ticks & 0xFFFFFFFFu),
-				(uint)(Ticks >> 32)
-			];
-		}
+		public static UInt64 GetTimeStamp(DateTime Date) => BitConverter.ToUInt64(BitConverter.GetBytes(Date.Ticks), 0);
 
 		public BBADataEntry(ReadOnlySpan<byte> Data)
 		{
 			Definition = Utility.Parse<BBADataEntryDefinition>(Data);
 			FileName = Encoding.ASCII.GetString(Data[(int)Size .. (int)(Size + Definition.FileNameLength)]).TrimEnd('\0');
+		}
+
+		public BBADataEntry()
+		{
+			Definition = new();
 		}
 
 		public byte[] Serialize()

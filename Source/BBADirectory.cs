@@ -30,6 +30,7 @@ namespace S7Packer.Source
 		public ref BBADirectoryDefinition GetDefinition() => ref Definition;
 		public byte[] Serialize() => Utility.Serialize(Definition);
 		public static uint Size => (uint)Marshal.SizeOf<BBADirectoryDefinition>(); // 276
+		public static readonly uint[] Keys = [892421091, 3702197895, 3064602941, 189782668];
 
 		private static long CombineEncryptionIdentifier(uint A, uint B)
 		{
@@ -65,6 +66,13 @@ namespace S7Packer.Source
         			"BAF"u8.CopyTo(new Span<byte>(Pointer, 3));
 				}
 			}
+		}
+
+		public byte[] Encrypt(byte[] SerializedHashTableData, uint Delta, int LoopCount)
+		{
+			byte[] Data = Serialize();
+			Crypt.Encrypt(Data, Keys, Delta, LoopCount);
+			return Data;
 		}
 	}
 }

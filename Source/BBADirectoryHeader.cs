@@ -20,6 +20,7 @@ namespace S7Packer.Source
 		public ref BBADirectoryHeaderDefinition GetDefinition() => ref Definition;
 		public byte[] Serialize() => Utility.Serialize(Definition);
 		public static uint Size => (uint)Marshal.SizeOf<BBADirectoryHeaderDefinition>(); // 64
+		public static readonly uint[] Keys = [623092400, 3578011951, 428883204, 211416760];
 
 		private static long GetEncryptionIdentifier(uint Lower, uint Upper)
 		{
@@ -42,6 +43,13 @@ namespace S7Packer.Source
 				CRC32 = CRC32,
 				EncryptionID = Crypt.S7_DIRECTORY_CRYPTID,
 			};
+		}
+
+		public byte[] Encrypt(uint Delta, int LoopCount)
+		{
+			byte[] Data = Serialize();
+			Crypt.Encrypt(Data, Keys, Delta, LoopCount);
+			return Data;
 		}
 	}
 }

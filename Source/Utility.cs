@@ -55,6 +55,19 @@ namespace S7Packer.Source
 			return CRC.GetCurrentHashAsUInt32();
 		}
 
+		public static UInt64 GetLastWriteTimeFromFileOrDirectory(string FileOrDirectoryPath)
+		{
+			Func<string, DateTime> GetWriteTime = File.Exists(FileOrDirectoryPath) ? File.GetLastWriteTime : Directory.GetLastWriteTime;
+			try
+			{
+				return BBADataEntry.GetTimeStamp(GetWriteTime(FileOrDirectoryPath));
+			}
+			catch
+			{
+				return 0;
+			}
+		}
+
 		public static string SanitizePath(string Base, string Result)
 		{
 			string Text = Result.Replace(Base, string.Empty).Replace('/', '\\');

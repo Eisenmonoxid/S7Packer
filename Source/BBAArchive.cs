@@ -26,13 +26,11 @@ namespace S7Packer.Source
 		private readonly FileStream ArchiveFileStream;
 		private readonly string ArchiveOutputDirectoryPath;
 		private readonly BinaryReader GlobalArchiveReader;
-		// private readonly List<BBAFileHashTableEntry> GlobalHashTableInfo;
 		private readonly BBAFileHashTable GlobalHashTable;
 		private readonly List<BBADataEntry> GlobalFileData;
 		private readonly BBADirectory GlobalDirectory;
 		private readonly BBAHeader GlobalHeader;
 		private readonly BBADirectoryHeader GlobalDirectoryHeader;
-		private readonly uint[] CurrentBBADirectoryHeader;
 		private readonly bool IS_PRODUCT = true;
 		private readonly Dictionary<BBAArchiveDataEntryType, List<string>> FileTypeExtensions = new()
 		{
@@ -225,11 +223,10 @@ namespace S7Packer.Source
 		{
             uint Delta = IS_PRODUCT ? PROD_FILE_DELTA : DEMO_FILE_DELTA;
             int LoopCount = IS_PRODUCT ? PROD_FILE_LOOP : DEMO_FILE_LOOP;
-            ReadOnlySpan<uint> Keys = [892421091, 3702197895, 3064602941, 189782668];
 
             Reader.BaseStream.Position = (int)GlobalDirectoryHeader.GetDefinition().OffsetLow;
             byte[] Bytes = Reader.ReadBytes((int)GlobalDirectoryHeader.GetDefinition().Length);
-            Crypt.Decrypt(Bytes, Keys, Delta, LoopCount);
+            Crypt.Decrypt(Bytes, BBADirectory.Keys, Delta, LoopCount);
 
 			return new(new BBADirectory(Bytes), Bytes.AsMemory());
 		}
@@ -238,10 +235,9 @@ namespace S7Packer.Source
         {
 			uint Delta = IS_PRODUCT ? PROD_HEAD_DELTA : DEMO_HEAD_DELTA;
             int LoopCount = IS_PRODUCT ? PROD_HEAD_LOOP : DEMO_HEAD_LOOP;
-            ReadOnlySpan<uint> Keys = [623092400, 3578011951, 428883204, 211416760];
 
 			byte[] Bytes = Reader.ReadBytes((int)GlobalHeader.GetDefinition().Size);
-			Crypt.Decrypt(Bytes, Keys, Delta, LoopCount);
+			Crypt.Decrypt(Bytes, BBADirectoryHeader.Keys, Delta, LoopCount);
 
 			return new BBADirectoryHeader(Bytes);
         }
@@ -278,7 +274,145 @@ namespace S7Packer.Source
 
 		public bool CreateArchiveFileByFolder(string InputFolderPath)
 		{
+			MemoryStream TemporaryFileData = new();
+
+
 			return true;
+		}
+
+		private static BBADataEntry SetupBasicDataEntry(string BasePath, string FilePath, BBAArchiveDataEntryType FileType)
+		{
+			BBADataEntry Entry = new();
+			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
+			string Name = Utility.SanitizePath(BasePath, FilePath);
+
+			Entry.FileName = Name;
+			Definition.FileNameLength = (uint)Name.Length;
+			Definition.FileNameOffset = (uint)Name.LastIndexOf('\\') + 1;
+			Definition.FileType = (uint)FileType;
+			Definition.TimeStamp = Utility.GetLastWriteTimeFromFileOrDirectory(FilePath);
+			Definition.BlockSize = ONE_MIB;
+			Definition.FirstChild = -1;
+			Definition.NextSibling = -1;
+
+			FileInfo Info = new(FilePath);
+			Definition.DecompressedFileSize = (uint)Info.Length;
+			Definition.CompressedFileSize = (uint)Info.Length;
+
+			return Entry;
+		}
+
+		private byte[] BuildBBADirectory(List<BBADataEntry> Files, byte[] UpdatedBBAEntry)
+		{
+			MemoryStream Directory = new();
+			Directory.Seek(0, SeekOrigin.Begin);
+
+			BBADirectory RawDirectory = new((uint)UpdatedBBAEntry.Length + BBADirectory.Size, (uint)Files.Count);
+			Directory.Write(RawDirectory.Serialize());
+
+			Span<byte> HashTable = GlobalHashTable.SerializeHashTable(Files);
+			Directory.Write(BitConverter.GetBytes(HashTable.Length));
+			Directory.Write(HashTable);
+
+			byte[] Data = Directory.ToArray();
+            Crypt.Encrypt(Data.AsSpan(), BBADirectory.Keys, IS_PRODUCT ? PROD_FILE_DELTA : DEMO_FILE_DELTA, IS_PRODUCT ? PROD_FILE_LOOP : DEMO_FILE_LOOP);
+
+			return Data;
+		}
+
+		private static byte[] BuildFileDictionary(List<BBADataEntry> Files)
+		{
+			MemoryStream FileDictionary = new();
+			FileDictionary.Seek(0, SeekOrigin.Begin);
+
+			uint TotalSize = 0;
+			uint Offset = BBAHeader.Size + BBADirectoryHeader.Size;
+
+			foreach (var Element in Files)
+			{
+				ref BBADataEntryDefinition Definition = ref Element.GetDefinition();
+				if (Definition.FileType != (uint)BBAArchiveDataEntryType.Directory)
+				{
+					Definition.FileOffset = Offset;
+					Definition.FirstChild = (int)TotalSize;
+					Definition.NextSibling = -1;
+				}
+				else
+				{
+					Definition.FirstChild = int.MaxValue;
+					Definition.NextSibling = (int)Offset;
+				}
+
+				Offset += Definition.CompressedFileSize;
+				TotalSize += (uint)Element.GetFullSizeWithPadding();
+				FileDictionary.Write(Element.Serialize());
+
+				Console.WriteLine("[PACKED] Name: " + Element.FileName);
+			}
+
+			return FileDictionary.ToArray();
+		}
+
+		private bool WriteFullBBAArchiveFile(List<BBADataEntry> Files, MemoryStream TemporaryFileData, string OutputPath)
+		{
+			FileStream FinalArchiveFile;
+			try
+			{
+				FinalArchiveFile = File.OpenWrite(OutputPath);
+			}
+			catch
+			{
+				TemporaryFileData.Dispose();
+				return false;
+			}
+
+			using BinaryWriter Writer = new(FinalArchiveFile);
+
+			BBAHeader Header = new();
+			Writer.Write(Header.Serialize());
+
+			// FileInfo Info = new(filePath);
+			byte[] FileDictionary = BuildFileDictionary(Files);
+			byte[] Data = BuildBBADirectory(Files, FileDictionary);
+			Crc32 CRC = new();
+			CRC.Append(Data);
+
+			BBADirectoryHeader DirectoryHeader = new(Header, (uint)Info.Length, (uint)Data.Length, CRC.GetCurrentHashAsUInt32());
+			byte[] DirectoryHeaderData = DirectoryHeader.Encrypt(IS_PRODUCT ? PROD_HEAD_DELTA : DEMO_HEAD_DELTA, IS_PRODUCT ? PROD_HEAD_LOOP : DEMO_HEAD_LOOP);
+            Writer.Write(DirectoryHeaderData);
+
+			TemporaryFileData.CopyTo(Writer.BaseStream);
+			TemporaryFileData.Dispose();
+
+            Writer.Write(Data);
+			return true;
+        }
+
+		private BBADataEntry GetDataEntry(string BasePath, string FilePath, BinaryWriter Writer)
+		{
+			BBADataEntry BBA;
+			if (File.Exists(FilePath))
+			{
+				BBAArchiveDataEntryType OriginalType = GetOriginalFileTypeByName(Utility.SanitizePath(BasePath, FilePath));
+				if (OriginalType == BBAArchiveDataEntryType.Compressed)
+				{
+					BBA = CreateBBAFileWithZLIBCompression(BasePath, FilePath, Writer);
+				}
+				else if (OriginalType == BBAArchiveDataEntryType.TEA)
+				{
+					BBA = CreateBBAFileWithTEAEncryption(BasePath, FilePath, Writer);
+				}
+				else
+				{
+					BBA = CreateBBAFileWithoutCompression(BasePath, FilePath, Writer);
+				}
+			}
+			else
+			{
+				BBA = CreateBBAFileForDirectory(BasePath, FilePath);
+			}
+
+			return BBA;
 		}
 
 		/*
@@ -605,47 +739,49 @@ namespace S7Packer.Source
 			return curFile;
 		}
 
+		*/
 		private BBADataEntry CreateBBAFileWithZLIBCompression(string BasePath, string CurrentPath, BinaryWriter Writer)
 		{
-			BBADataEntry bbaFile = SetupBBADataEntry(BasePath, CurrentPath, BBAArchiveDataEntryType.Compressed);
-			ref BBADataEntryDefinition Definition = ref bbaFile.GetDefinition();
+			BBADataEntry Entry = SetupBasicDataEntry(BasePath, CurrentPath, BBAArchiveDataEntryType.Compressed);
+			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
 
 			using FileStream Input = File.OpenRead(CurrentPath);
 			using MemoryStream CompressedBuffer = new();
 			using GZipStream GZIP = new(CompressedBuffer, CompressionMode.Compress, true);
 
 			Crc32 DecompressedCRC = new();
-			Crc32 CompressedCRC   = new();
+			Crc32 CompressedCRC = new();
 
-			byte[] inputBuffer = new byte[ONE_MIB];
-			int bytesRead;
-			while ((bytesRead = Input.Read(inputBuffer, 0, inputBuffer.Length)) > 0)
+			byte[] Buffer = new byte[ONE_MIB];
+			int BytesRead;
+			while ((BytesRead = Input.Read(Buffer, 0, Buffer.Length)) > 0)
 			{
-				DecompressedCRC.Append(inputBuffer.AsSpan(0, bytesRead));
-				GZIP.Write(inputBuffer, 0, bytesRead);
+				DecompressedCRC.Append(Buffer.AsSpan(0, BytesRead));
+				GZIP.Write(Buffer, 0, BytesRead);
 			}
 
 			GZIP.Dispose();
 
 			CompressedBuffer.Position = 0;
-			byte[] outputBuffer = new byte[ONE_MIB];
+			byte[] OutputBuffer = new byte[ONE_MIB];
 
-			while ((bytesRead = CompressedBuffer.Read(outputBuffer, 0, outputBuffer.Length)) > 0)
+			while ((BytesRead = CompressedBuffer.Read(OutputBuffer, 0, OutputBuffer.Length)) > 0)
 			{
-				Span<byte> curBlock = outputBuffer.AsSpan(0, bytesRead);
-				Crypt.EncryptCompressedChunk(curBlock, Definition.FileNameLength, IS_PRODUCT);
+				Span<byte> Block = OutputBuffer.AsSpan(0, BytesRead);
+				Crypt.EncryptCompressedChunk(Block, Definition.FileNameLength, IS_PRODUCT);
 
-				CompressedCRC.Append(curBlock);
-				Writer.Write(curBlock);
+				CompressedCRC.Append(Block);
+				Writer.Write(Block);
 
-				Definition.CompressedFileSize += (uint)bytesRead;
+				Definition.CompressedFileSize += (uint)BytesRead;
 			}
 
-			Definition.DecompressedCrc32 = DecompressedCRC.GetCurrentHashAsUInt32();
-			Definition.CompressedCrc32 = CompressedCRC.GetCurrentHashAsUInt32();
+			Definition.DecompressedCRC32 = DecompressedCRC.GetCurrentHashAsUInt32();
+			Definition.CompressedCRC32 = CompressedCRC.GetCurrentHashAsUInt32();
 
-			return bbaFile;
+			return Entry;
 		}
+		/*
 
 		private static BBADataEntry CreateBBAFileForDirectory(string BasePath, string CurrentPath)
 		{
