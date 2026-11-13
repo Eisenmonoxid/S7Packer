@@ -68,16 +68,10 @@ namespace S7Packer.Source
 			}
 		}
 
-		public static string SanitizePath(string Base, string Result)
+		public static string SanitizePath(string BasePath, string FullPath)
 		{
-			string Text = Result.Replace(Base, string.Empty).Replace('/', '\\');
-			Text = Text.Replace("\\\\", "\\");
-			if (Text.StartsWith('\\'))
-			{
-				Text = Text.TrimStart('\\');
-			}
-
-			return string.IsNullOrEmpty(Text) ? "." : Text;
+			string Text = FullPath.Replace(BasePath, string.Empty).Replace('/', '\\').Replace("\\\\", "\\").TrimStart('\\');
+			return Text.Length == 0 ? "." : Text;
 		}
 	}
 }

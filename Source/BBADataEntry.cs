@@ -28,8 +28,8 @@ namespace S7Packer.Source
 		public fixed byte Padding2[4];
 		public UInt32 FileNameLength;
 		public UInt32 FileNameOffset;
-		public Int32 FirstChild;
-		public Int32 NextSibling;
+		public UInt32 NextDirectoryOffset;
+		public UInt32 NextFileOffset;
 		// string FileName follows (dynamic length)
 	}
 

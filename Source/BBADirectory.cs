@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace S7Packer.Source
@@ -66,13 +65,6 @@ namespace S7Packer.Source
         			"BAF"u8.CopyTo(new Span<byte>(Pointer, 3));
 				}
 			}
-		}
-
-		public byte[] Encrypt(byte[] SerializedHashTableData, uint Delta, int LoopCount)
-		{
-			byte[] Data = Serialize();
-			Crypt.Encrypt(Data, Keys, Delta, LoopCount);
-			return Data;
 		}
 	}
 }
