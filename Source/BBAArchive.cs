@@ -21,6 +21,8 @@ namespace S7Packer.Source
 		// ------------------------------------------------------------ \\
 		private readonly FileStream ArchiveFileStream;
 		private readonly string ArchiveOutputDirectoryPath;
+		private readonly string ArchiveOutputFilePath;
+		private readonly string InputFolderPath;
 		private readonly BinaryReader GlobalArchiveReader;
 		private readonly BBAFileHashTable GlobalHashTable;
 		private readonly List<BBADataEntry> GlobalFileData;
@@ -45,24 +47,44 @@ namespace S7Packer.Source
 			GlobalArchiveReader = new(ArchiveFileStream);
 			ArchiveFileStream.Seek(0, SeekOrigin.Begin);
 			IS_PRODUCT = true; //IsDemoOrProductGameVersion(GlobalArchiveReader);
+			
+			GlobalHeader = new(GlobalArchiveReader.ReadBytes((int)BBAHeader.Size));
+			GlobalDirectoryHeader = ParseBBADirectoryHeader(GlobalArchiveReader);
+			Tuple<BBADirectory, ReadOnlyMemory<byte>> Data = ParseBBADirectoryAndFileDictionary(GlobalArchiveReader);
+			GlobalDirectory = Data.Item1;
+			GlobalFileData = ParseBBADataEntries(Data.Item2[(int)(GlobalDirectory.GetDefinition().OffsetFileEntries + 4)..], GlobalDirectory.GetDefinition().NumberOfFiles);
+			GlobalHashTable = ParseHashTable(Data.Item2[(int)GlobalDirectory.GetDefinition().OffsetFileHashtable..]);
+			// GlobalHashTable.LinkHashTableEntriesToDataEntries(GlobalFileData);
 
-			try
-			{
-				GlobalHeader = new(GlobalArchiveReader.ReadBytes((int)BBAHeader.Size));
-				GlobalDirectoryHeader = ParseBBADirectoryHeader(GlobalArchiveReader);
-				Tuple<BBADirectory, ReadOnlyMemory<byte>> Data = ParseBBADirectoryAndFileDictionary(GlobalArchiveReader);
-				GlobalDirectory = Data.Item1;
-				GlobalFileData = ParseBBADataEntries(Data.Item2[(int)(GlobalDirectory.GetDefinition().OffsetFileEntries + 4)..], GlobalDirectory.GetDefinition().NumberOfFiles);
-				GlobalHashTable = ParseHashTable(Data.Item2[(int)GlobalDirectory.GetDefinition().OffsetFileHashtable..]);
-				GlobalHashTable.LinkHashTableEntriesToDataEntries(GlobalFileData);
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine("[ERROR] " + ex.Message);
-				throw;
-			}
+			Console.WriteLine("[INFO] Loaded BBA archive with " + GlobalFileData.Count + " files and " + GlobalHashTable.TotalSize + " HashTable entries.");
+		}
 
-			Console.WriteLine("[INFO] Loaded BBA Archive with " + GlobalFileData.Count + " files.");
+		public BBAArchiveFile(string FolderPath, string OutputArchiveFilePath)
+		{
+			ArchiveOutputFilePath = OutputArchiveFilePath;
+			InputFolderPath = FolderPath;
+		}
+
+		public bool CreateArchiveFileByFolder()
+		{
+			MemoryStream TemporaryFileData = new();
+
+			List<BBADataEntry> PackedFiles = [];
+			List<string> ElementsToPack = Utility.GetFiles(InputFolderPath);
+			ElementsToPack.Insert(0, InputFolderPath);
+
+            foreach (string Element in ElementsToPack)
+			{
+				var Entry = CreateDataEntry(InputFolderPath, Element, TemporaryFileData);
+				if (Entry == null)
+				{
+					continue;
+				}
+				
+				PackedFiles.Add(Entry);
+            }
+
+			return WriteFullBBAArchiveFile(PackedFiles, TemporaryFileData, ArchiveOutputFilePath);
 		}
 
 		/*
@@ -171,15 +193,11 @@ namespace S7Packer.Source
 
 			Writer.Dispose();
 
-			long TimeStamp = (long)Definition.TimeStamp;
-			if (Definition.TimeStamp == 0)
-			{
-				TimeStamp = DateTime.Now.Ticks;
-			}
-
 			new FileInfo(OutputPath)
 			{
-				LastWriteTime = new DateTime(1600, 1, 1).AddTicks(TimeStamp)
+				LastWriteTime = Definition.TimeStamp == 0
+					? DateTime.Now
+					: BBADataEntry.GetDateTimeFromTimeStamp(Definition.TimeStamp)
 			};
 
 			return true;
@@ -266,32 +284,6 @@ namespace S7Packer.Source
 			}
 
 			return BBAArchiveDataEntryType.None;
-		}
-
-		public bool CreateArchiveFileByFolder(string InputFolderPath)
-		{
-			MemoryStream TemporaryFileData = new();
-
-			List<BBADataEntry> PackedFiles = [];
-			List<string> ElementsToPack = Utility.GetFiles(InputFolderPath);
-			ElementsToPack.Insert(0, InputFolderPath);
-
-            foreach (string Element in ElementsToPack)
-			{
-				var Entry = CreateDataEntry(InputFolderPath, Element, TemporaryFileData);
-				if (Entry == null)
-				{
-					continue;
-				}
-				
-				PackedFiles.Add(Entry);
-            }
-
-			string ArchiveFileName = ArchiveFileStream.Name;
-			ArchiveFileStream.Dispose();
-
-			bool Result = WriteFullBBAArchiveFile(PackedFiles, TemporaryFileData, ArchiveFileName + "TEST");
-			return Result;
 		}
 
 		private BBADataEntry AddRawFileData(string BasePath, string FullPath, MemoryStream TemporaryFileData)
@@ -480,9 +472,7 @@ namespace S7Packer.Source
 			Directory.Write(FileDictionary);
 
 			uint HashTableSize = BBAFileHashTable.CalculateHashTableSize((uint)Files.Count);
-			BBAFileHashTable HashTableData = GlobalHashTable.TotalSize == HashTableSize
-				? GlobalHashTable
-				: new BBAFileHashTable(HashTableSize);
+			BBAFileHashTable HashTableData = new(HashTableSize);
 			Span<byte> HashTable = HashTableData.SerializeHashTable(Files);
 			Directory.Write(BitConverter.GetBytes(HashTableData.TotalSize));
 			Directory.Write(HashTable);
@@ -609,7 +599,7 @@ namespace S7Packer.Source
 			Definition.CompressedCRC32 = 0;
 			Definition.FileOffset = 0;
 			Definition.BlockSize = 0;
-			Definition.TimeStamp = Utility.GetLastWriteTimeFromFileOrDirectory(FullPath);
+			Definition.TimeStamp = 0;
 
 			return Entry;
 		}

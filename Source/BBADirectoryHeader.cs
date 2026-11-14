@@ -21,13 +21,7 @@ namespace S7Packer.Source
 		public byte[] Serialize() => Utility.Serialize(Definition);
 		public static uint Size => (uint)Marshal.SizeOf<BBADirectoryHeaderDefinition>(); // 64
 		public static readonly uint[] Keys = [623092400, 3578011951, 428883204, 211416760];
-
-		private static long GetEncryptionIdentifier(uint Lower, uint Upper)
-		{
-			ulong Combined = ((ulong)Lower << 32) | Upper;
-			return unchecked((long)Combined);
-		}
-
+		
 		public BBADirectoryHeader(ReadOnlySpan<byte> Data)
 		{
 			Definition = Utility.Parse<BBADirectoryHeaderDefinition>(Data);

@@ -18,7 +18,7 @@ namespace S7Packer.Source
 
 			string Version = Assembly.GetEntryAssembly().GetCustomAttribute<AssemblyFileVersionAttribute>().Version;
             Console.WriteLine("[INFO] S7Packer v" + Version + " - github.com/Eisenmonoxid/S7Packer");
-            Console.WriteLine("[INFO] Currently running on " + RuntimeInformation.OSDescription.ToString());
+            Console.WriteLine("[INFO] Currently running on " + RuntimeInformation.OSDescription.ToString() + " with runtime: " + RuntimeInformation.FrameworkDescription);
 
             FileStream Stream = GetFileStream(args);
             if (Stream == null)
@@ -56,7 +56,7 @@ namespace S7Packer.Source
 
 		static bool HandleFile(FileStream Stream, string Folder)
 		{
-            bool Result;
+            bool Result = false;
             BBAArchiveFile Archive;
             Stopwatch Watch = new();
             
@@ -64,21 +64,36 @@ namespace S7Packer.Source
             {
                 Archive = new BBAArchiveFile(Stream);
             }
-            catch
+            catch (Exception ex)
             {
-                return false;
+                Console.WriteLine("[ERROR] " + ex.Message);
+                return Result;
             }
 
             Watch.Start();
             if (Folder == default)
             {
                 Console.WriteLine("[INFO] Unpacking archive file " + Stream.Name);
-                Result = Archive.ExtractAllFilesFromArchive();
+                try
+                {
+                    Result = Archive.ExtractAllFilesFromArchive();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                }
             }
             else
             {
-                Console.WriteLine("[INFO] Packing folder content " + Folder + " to archive file " + Stream.Name);
-                Result = Archive.CreateArchiveFileByFolder(Folder);
+                Console.WriteLine("\n[INFO] Packing folder content " + Folder + " to archive file " + Stream.Name);
+                try
+                {
+                    Result = Archive.CreateArchiveFileByFolder();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                }
             }
             Watch.Stop();
 
@@ -90,7 +105,6 @@ namespace S7Packer.Source
         {
             FileStream Stream;
             string Filepath = args.FirstOrDefault(Element => Element.EndsWith(".bba"));
-
             if (Filepath == default)
             {
                 Console.WriteLine("[ERROR] No argument(s) given! Aborting ...");
@@ -103,10 +117,13 @@ namespace S7Packer.Source
                 return null;
             }
 
-            Stream = Utility.OpenFileStream(Filepath);
-            if (Stream == null)
+            try
             {
-                Console.WriteLine("[ERROR] Could not open FileStream! Aborting ...");
+                Stream = new(Filepath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ERROR] Could not open FileStream! Aborting ...\n" + ex.Message);
                 return null;
             }
 

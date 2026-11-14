@@ -35,83 +35,24 @@ namespace S7Packer.Source
 
 		public Span<byte> SerializeHashTable(List<BBADataEntry> Files)
 		{
-			BBAArchiveHashTableEntryDefinition[] ExistingEntries = (BBAArchiveHashTableEntryDefinition[])HashTableData.Clone();
-			uint[] Hashes = new uint[Files.Count];
-			uint[] Offsets = new uint[Files.Count];
+			uint Mask = AmountOfHashTableEntries - 1;
 			uint Offset = 0;
 			for (int i = 0; i < Files.Count; i++)
 			{
-				BBADataEntry DataEntry = Files[i];
-				Hashes[i] = Utility.GetCRC32OfData(Encoding.ASCII.GetBytes(DataEntry.FileName));
-				Offsets[i] = Offset;
-				Offset += (uint)DataEntry.GetFullSizeWithPadding();
-			}
+				BBADataEntry Entry = Files[i];
+				ReadOnlySpan<byte> FileNameData = Encoding.ASCII.GetBytes(Entry.FileName);
+				UInt32 Hash = Utility.GetCRC32OfData(FileNameData);
+				uint HashTableIndex = Hash & Mask;
 
-			int ExistingEntryCount = 0;
-			for (int i = 0; i < ExistingEntries.Length; i++)
-			{
-				if (ExistingEntries[i].CRC32 != 0)
-				{
-					ExistingEntryCount++;
-				}
-			}
-
-			bool[] ReusedSlots = new bool[ExistingEntries.Length];
-			int[] SlotIndexes = new int[Files.Count];
-			bool CanReuseSlots = ExistingEntryCount == Files.Count;
-			for (int i = 0; i < Files.Count; i++)
-			{
-				int SlotIndex = -1;
-				for (int j = 0; j < ExistingEntries.Length; j++)
-				{
-					if (!ReusedSlots[j] && ExistingEntries[j].CRC32 == Hashes[i] && Hashes[i] != 0)
-					{
-						SlotIndex = j;
-						break;
-					}
-				}
-
-				if (SlotIndex == -1)
-				{
-					CanReuseSlots = false;
-					break;
-				}
-
-				SlotIndexes[i] = SlotIndex;
-				ReusedSlots[SlotIndex] = true;
-			}
-
-			Array.Clear(HashTableData);
-			if (CanReuseSlots)
-			{
-				for (int i = 0; i < Files.Count; i++)
-				{
-					HashTableData[SlotIndexes[i]] = new BBAArchiveHashTableEntryDefinition
-					{
-						CRC32 = Hashes[i],
-						Offset = Offsets[i]
-					};
-				}
-
-				return MemoryMarshal.AsBytes(HashTableData.AsSpan());
-			}
-
-			bool[] Occupied = new bool[HashTableData.Length];
-			uint Mask = AmountOfHashTableEntries - 1;
-			for (int i = 0; i < Files.Count; i++)
-			{
-				uint HashTableIndex = Hashes[i] & Mask;
-				while (Occupied[HashTableIndex])
+				while (HashTableData[HashTableIndex].Offset != 0)
 				{
 					HashTableIndex = (HashTableIndex + 1) & Mask;
 				}
 
-				HashTableData[HashTableIndex] = new BBAArchiveHashTableEntryDefinition
-				{
-					CRC32 = Hashes[i],
-					Offset = Offsets[i]
-				};
-				Occupied[HashTableIndex] = true;
+    			HashTableData[HashTableIndex].CRC32 = Hash;
+    			HashTableData[HashTableIndex].Offset = Offset;
+
+				Offset += (uint)Entry.GetFullSizeWithPadding();
 			}
 			
 			return MemoryMarshal.AsBytes(HashTableData.AsSpan());

@@ -9,19 +9,6 @@ namespace S7Packer.Source
 {
 	public static class Utility
 	{
-		public static FileStream OpenFileStream(string Path)
-		{
-			try
-			{
-				return new FileStream(Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine(ex.Message);
-				return null;
-			}
-		}
-
 		public static List<string> GetFiles(string Input)
 		{
 			List<string> Files = [.. Directory.GetFiles(Input)];

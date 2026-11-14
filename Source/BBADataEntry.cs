@@ -35,11 +35,13 @@ namespace S7Packer.Source
 
 	internal class BBADataEntry
 	{
+		private static readonly DateTime BBA_EPOCH = new(1600, 1, 1);
 		private BBADataEntryDefinition Definition;
 		public ref BBADataEntryDefinition GetDefinition() => ref Definition;
 		public string FileName;
 		public static uint Size => (uint)Marshal.SizeOf<BBADataEntryDefinition>();
-		public static UInt64 GetTimeStamp(DateTime Date) => BitConverter.ToUInt64(BitConverter.GetBytes(Date.Ticks), 0);
+		public static UInt64 GetTimeStamp(DateTime Date) => unchecked((UInt64)(Date.Ticks - BBA_EPOCH.Ticks));
+		public static DateTime GetDateTimeFromTimeStamp(UInt64 TimeStamp) => BBA_EPOCH.AddTicks(unchecked((Int64)TimeStamp));
 
 		public BBADataEntry(ReadOnlySpan<byte> Data)
 		{

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
+		<TargetFramework Condition="'$(UseNet11)' == 'true'">net11.0</TargetFramework>
+		<TargetFramework Condition="'$(UseNet11)' != 'true'">net10.0</TargetFramework>
 		<OutputType>Exe</OutputType>
 		<GenerateAssemblyInfo>True</GenerateAssemblyInfo>
 	</PropertyGroup>
@@ -52,6 +53,6 @@
 		<Content Include="favicon.ico" />
 	</ItemGroup>
   	<ItemGroup>
-    	<PackageReference Include="System.IO.Hashing" Version="10.0.14" />
+    	<PackageReference Include="System.IO.Hashing" Version="11.0.0" />
 	</ItemGroup>
 </Project>
