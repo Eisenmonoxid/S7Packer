@@ -20,26 +20,26 @@ namespace S7Packer.Source
             Console.WriteLine("[INFO] S7Packer v" + Version + " - github.com/Eisenmonoxid/S7Packer");
             Console.WriteLine("[INFO] Currently running on " + RuntimeInformation.OSDescription.ToString() + " with runtime: " + RuntimeInformation.FrameworkDescription);
 
-            FileStream Stream = GetFileStream(args);
-            if (Stream == null)
-            {
-                try
-                {
-                    Console.ReadKey();
-                }
-                catch
-                {
-                    // Ignore
-                }
+            bool Result = false;
+            bool ProductOrDemo = args.Any(Element => Element.Contains("--demo"));
+            string Folder = args.FirstOrDefault(Element => !Element.EndsWith(".bba") && Directory.Exists(Element));
+            string Filepath = args.FirstOrDefault(Element => Element.EndsWith(".bba"));
 
-                return;
+            if (Folder == default)
+            {
+                FileStream Stream = GetFileStream(Filepath);
+                if (Stream != null)
+                {
+                    Result = Unpack(Stream, !ProductOrDemo);
+                    Stream.Dispose();
+                }
+            }
+            else
+            {
+                Result = Pack(Folder, Filepath, !ProductOrDemo);
             }
 
-            string FolderPath = args.FirstOrDefault(Element => !Element.EndsWith(".bba") && Directory.Exists(Element));
-			bool Result = HandleFile(Stream, FolderPath);
-			Stream.Dispose();
-
-            Console.WriteLine("\n[INFO] Finished!" + (!Result ? " One or more errors occured." : " No errors occured."));
+            Console.WriteLine("[INFO] Finished!" + (!Result ? " One or more errors occured." : " No errors occured."));
             Console.WriteLine("[INFO] Press any key to exit ...");
             
             try
@@ -54,15 +54,15 @@ namespace S7Packer.Source
             return;
 		}
 
-		static bool HandleFile(FileStream Stream, string Folder)
-		{
+        static bool Unpack(FileStream Stream,  bool IsProductVersion)
+        {
             bool Result = false;
             BBAArchiveFile Archive;
             Stopwatch Watch = new();
             
             try
             {
-                Archive = new BBAArchiveFile(Stream);
+                Archive = new BBAArchiveFile(Stream, IsProductVersion);
             }
             catch (Exception ex)
             {
@@ -70,48 +70,56 @@ namespace S7Packer.Source
                 return Result;
             }
 
+            Console.WriteLine("[INFO] Unpacking archive file " + Stream.Name + ".\n");
+
             Watch.Start();
-            if (Folder == default)
+            try
             {
-                Console.WriteLine("[INFO] Unpacking archive file " + Stream.Name);
-                try
-                {
-                    Result = Archive.ExtractAllFilesFromArchive();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }
+                Result = Archive.ExtractAllFilesFromArchive();
             }
-            else
+            catch (Exception ex)
             {
-                Console.WriteLine("\n[INFO] Packing folder content " + Folder + " to archive file " + Stream.Name);
-                try
-                {
-                    Result = Archive.CreateArchiveFileByFolder();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }
+                Console.WriteLine(ex.ToString());
             }
             Watch.Stop();
 
-            Console.WriteLine("[INFO] Operation took " + Watch.ElapsedMilliseconds + " ms.");
+            Console.WriteLine("\n[INFO] Operation took " + Watch.ElapsedMilliseconds + " ms.");
+			return Result;
+        }
+
+		static bool Pack(string Folder, string Filepath, bool IsProductVersion)
+		{
+            bool Result = false;
+            Stopwatch Watch = new();
+            BBAArchiveFile Archive = new(Folder, Filepath, IsProductVersion);
+
+            Console.WriteLine("\n[INFO] Packing folder content " + Folder + " to archive file " + Filepath + ".\n");
+
+            Watch.Start();
+            try
+            {
+                Result = Archive.CreateArchiveFileByFolder();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+            Watch.Stop();
+
+            Console.WriteLine("\n[INFO] Operation took " + Watch.ElapsedMilliseconds + " ms.");
 			return Result;
 		}
 
-		static FileStream GetFileStream(string[] args)
+		static FileStream GetFileStream(string Filepath)
         {
             FileStream Stream;
-            string Filepath = args.FirstOrDefault(Element => Element.EndsWith(".bba"));
             if (Filepath == default)
             {
                 Console.WriteLine("[ERROR] No argument(s) given! Aborting ...");
                 return null;
             }
 
-            if (File.Exists(Filepath) == false)
+            if (!File.Exists(Filepath))
             {
                 Console.WriteLine("[ERROR] File does not exist! Aborting ...");
                 return null;

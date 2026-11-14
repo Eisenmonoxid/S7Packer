@@ -29,24 +29,23 @@ namespace S7Packer.Source
 		private readonly BBADirectory GlobalDirectory;
 		private readonly BBAHeader GlobalHeader;
 		private readonly BBADirectoryHeader GlobalDirectoryHeader;
-		private readonly bool IS_PRODUCT = true; // TODO
+		private readonly bool IS_PRODUCT;
 		private readonly Dictionary<BBAArchiveDataEntryType, List<string>> FileTypeExtensions = new()
 		{
-			{BBAArchiveDataEntryType.TEA, 			[]},
-			{BBAArchiveDataEntryType.Compressed, 	[]},
-			{BBAArchiveDataEntryType.None, 			[]}
+			{BBAArchiveDataEntryType.TEA, 			[".mp3"]},
+			{BBAArchiveDataEntryType.None, 			[".bik"]}
 		};
 
-		public BBAArchiveFile(FileStream Archive)
+		public BBAArchiveFile(FileStream Archive, bool IsProductVersion)
 		{
 			ArchiveFileStream = Archive;
+			IS_PRODUCT = IsProductVersion;
 
 			FileInfo Info = new(ArchiveFileStream.Name);
 			ArchiveOutputDirectoryPath = Path.Combine(Info.DirectoryName, Path.GetFileNameWithoutExtension(Info.Name) + "_Extracted");
 
 			GlobalArchiveReader = new(ArchiveFileStream);
 			ArchiveFileStream.Seek(0, SeekOrigin.Begin);
-			IS_PRODUCT = true; //IsDemoOrProductGameVersion(GlobalArchiveReader);
 			
 			GlobalHeader = new(GlobalArchiveReader.ReadBytes((int)BBAHeader.Size));
 			GlobalDirectoryHeader = ParseBBADirectoryHeader(GlobalArchiveReader);
@@ -56,13 +55,14 @@ namespace S7Packer.Source
 			GlobalHashTable = ParseHashTable(Data.Item2[(int)GlobalDirectory.GetDefinition().OffsetFileHashtable..]);
 			// GlobalHashTable.LinkHashTableEntriesToDataEntries(GlobalFileData);
 
-			Console.WriteLine("[INFO] Loaded BBA archive with " + GlobalFileData.Count + " files and " + GlobalHashTable.TotalSize + " HashTable entries.");
+			Console.WriteLine("\n[INFO] Loaded BBA archive with " + GlobalFileData.Count + " files and " + GlobalHashTable.TotalSize + " HashTable entries.");
 		}
 
-		public BBAArchiveFile(string FolderPath, string OutputArchiveFilePath)
+		public BBAArchiveFile(string FolderPath, string OutputArchiveFilePath, bool IsProductVersion)
 		{
 			ArchiveOutputFilePath = OutputArchiveFilePath;
 			InputFolderPath = FolderPath;
+			IS_PRODUCT = IsProductVersion;
 		}
 
 		public bool CreateArchiveFileByFolder()
@@ -86,26 +86,6 @@ namespace S7Packer.Source
 
 			return WriteFullBBAArchiveFile(PackedFiles, TemporaryFileData, ArchiveOutputFilePath);
 		}
-
-		/*
-		private bool IsDemoOrProductGameVersion(BinaryReader Reader)
-		{
-			try
-			{
-				ParseBBADirectoryHeaderFromFile(Reader);
-			}
-			catch (ArgumentOutOfRangeException)
-			{
-				return false;
-			}
-			finally
-			{
-				Reader.BaseStream.Seek(0, SeekOrigin.Begin);
-			}
-
-			return true;
-		}
-		*/
 
 		public bool ExtractAllFilesFromArchive()
 		{
@@ -203,19 +183,6 @@ namespace S7Packer.Source
 			return true;
         }
 
-		private void UpdateFileTypeExtensions(BBADataEntry File)
-		{
-			string Extension = Path.GetExtension(File.FileName).ToLowerInvariant();
-			BBAArchiveDataEntryType FileType = (BBAArchiveDataEntryType)File.GetDefinition().FileType;
-
-			if (!string.IsNullOrEmpty(Extension) &&
-				FileTypeExtensions.TryGetValue(FileType, out List<string> Extensions) &&
-				!Extensions.Contains(Extension))
-			{
-				Extensions.Add(Extension);
-			}
-		}
-
 		private List<BBADataEntry> ParseBBADataEntries(ReadOnlyMemory<byte> Data, UInt32 AmountOfFiles)
 		{
 			List<BBADataEntry> Result = new((int)AmountOfFiles);
@@ -225,8 +192,6 @@ namespace S7Packer.Source
 			{
 				BBADataEntry Entry = new(Data[DataIndex..].Span);
 				Result.Add(Entry);
-				UpdateFileTypeExtensions(Entry);
-
 				DataIndex += Entry.GetFullSizeWithPadding();
 			}
 
@@ -283,7 +248,7 @@ namespace S7Packer.Source
 				}
 			}
 
-			return BBAArchiveDataEntryType.None;
+			return BBAArchiveDataEntryType.Compressed;
 		}
 
 		private BBADataEntry AddRawFileData(string BasePath, string FullPath, MemoryStream TemporaryFileData)
