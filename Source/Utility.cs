@@ -9,6 +9,33 @@ namespace S7Packer.Source
 {
 	public static class Utility
 	{
+		private const int ONE_MIB = 1048576;
+		public static readonly byte[] EMPTY_GZIP_STREAM = [0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 
+			0x00, 0x00, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+		public static FileStream OpenInputFile(string FullPath)
+		{
+			try
+			{
+				return File.OpenRead(FullPath);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine("\n[ERROR] Could not open file \"" + FullPath + "\": " + ex.Message);
+				return null;
+			}
+		}
+
+		public static void CopyToWithCRC(Stream Input, Stream Output, Crc32 CRC)
+		{
+			byte[] Buffer = new byte[ONE_MIB];
+			int BytesRead;
+			while ((BytesRead = Input.Read(Buffer, 0, Buffer.Length)) > 0)
+			{
+				CRC.Append(Buffer.AsSpan(0, BytesRead));
+				Output.Write(Buffer, 0, BytesRead);
+			}
+		}
+
 		public static List<string> GetFiles(string Input)
 		{
 			List<string> Files = [.. Directory.GetFiles(Input)];

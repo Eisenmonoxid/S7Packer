@@ -7,6 +7,8 @@ namespace S7Packer.Source
 {
 	public static class Crypt
     {
+		public const int MIN_TEA_BLOCK_SIZE = sizeof(UInt32) * 2;
+
 		public const UInt32 S7_HEAD_CRYPTID = 0x6D1A8389;
 		public const Int64 S7_DIRECTORY_CRYPTID = -0x1DDA2D688280896A;
 		public const Int64 S7_FILE_CRYPTID = 0x7D7F7696B57D7B42;

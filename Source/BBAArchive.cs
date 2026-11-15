@@ -19,10 +19,10 @@ namespace S7Packer.Source
 		private const uint DEMO_FILE_DELTA = 1532019678;
 		private const int DEMO_FILE_LOOP = 9;
 		// ------------------------------------------------------------ \\
-		private readonly FileStream ArchiveFileStream;
 		private readonly string ArchiveOutputDirectoryPath;
 		private readonly string ArchiveOutputFilePath;
 		private readonly string InputFolderPath;
+		private readonly FileStream ArchiveFileStream;
 		private readonly BinaryReader GlobalArchiveReader;
 		private readonly BBAFileHashTable GlobalHashTable;
 		private readonly List<BBADataEntry> GlobalFileData;
@@ -32,8 +32,8 @@ namespace S7Packer.Source
 		private readonly bool IS_PRODUCT;
 		private readonly Dictionary<BBAArchiveDataEntryType, List<string>> FileTypeExtensions = new()
 		{
-			{BBAArchiveDataEntryType.TEA, 			[".mp3"]},
-			{BBAArchiveDataEntryType.None, 			[".bik"]}
+			{BBAArchiveDataEntryType.TEA, 	[".mp3"]},
+			{BBAArchiveDataEntryType.None, 	[".bik"]}
 		};
 
 		public BBAArchiveFile(FileStream Archive, bool IsProductVersion)
@@ -256,14 +256,9 @@ namespace S7Packer.Source
 			BBADataEntry Entry = SetupBasicDataEntry(BasePath, FullPath, BBAArchiveDataEntryType.None);
 			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
 
-			FileStream Input;
-			try
+			using FileStream Input = Utility.OpenInputFile(FullPath);
+			if (Input == null)
 			{
-				Input = File.OpenRead(FullPath);
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine("\n[ERROR] Could not open file \"CurrentPath\": " + ex.Message);
 				return null;
 			}
 
@@ -294,46 +289,37 @@ namespace S7Packer.Source
 			BBADataEntry Entry = SetupBasicDataEntry(BasePath, FullPath, BBAArchiveDataEntryType.Compressed);
 			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
 
-			FileStream Input;
-			try
+			using FileStream Input = Utility.OpenInputFile(FullPath);
+			if (Input == null)
 			{
-				Input = File.OpenRead(FullPath);
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine("\n[ERROR] Could not open file \"CurrentPath\": " + ex.Message);
 				return null;
 			}
 
 			using MemoryStream CompressedBuffer = new();
-			using GZipStream GZIP = new(CompressedBuffer, CompressionMode.Compress, true);
-
 			Crc32 DecompressedCRC = new();
 			Crc32 CompressedCRC = new();
 
-			byte[] Buffer = new byte[ONE_MIB];
-			int BytesRead;
-			while ((BytesRead = Input.Read(Buffer, 0, Buffer.Length)) > 0)
+			using (GZipStream GZIP = new(CompressedBuffer, CompressionMode.Compress, true))
 			{
-				DecompressedCRC.Append(Buffer.AsSpan(0, BytesRead));
-				GZIP.Write(Buffer, 0, BytesRead);
+				Utility.CopyToWithCRC(Input, GZIP, DecompressedCRC);
 			}
 
-			GZIP.Dispose();
-
-			CompressedBuffer.Position = 0;
-			byte[] OutputBuffer = new byte[ONE_MIB];
-			while ((BytesRead = CompressedBuffer.Read(OutputBuffer, 0, OutputBuffer.Length)) > 0)
+			if (CompressedBuffer.Length == 0)
 			{
-				Span<byte> Block = OutputBuffer.AsSpan(0, BytesRead);
+				CompressedBuffer.Write(Utility.EMPTY_GZIP_STREAM);
+			}
+
+			Span<byte> CompressedData = CompressedBuffer.GetBuffer().AsSpan(0, (int)CompressedBuffer.Length);
+			for (int Offset = 0; Offset < CompressedData.Length; Offset += ONE_MIB)
+			{
+				Span<byte> Block = CompressedData.Slice(Offset, Math.Min(ONE_MIB, CompressedData.Length - Offset));
 				Crypt.EncryptCompressedChunk(Block, Definition.FileNameLength, IS_PRODUCT);
 
 				CompressedCRC.Append(Block);
 				TemporaryFileData.Write(Block);
-
-				Definition.CompressedFileSize += (uint)BytesRead;
 			}
 
+			Definition.CompressedFileSize = (uint)CompressedData.Length;
 			Definition.DecompressedCRC32 = DecompressedCRC.GetCurrentHashAsUInt32();
 			Definition.CompressedCRC32 = CompressedCRC.GetCurrentHashAsUInt32();
 
@@ -345,14 +331,9 @@ namespace S7Packer.Source
 			BBADataEntry Entry = SetupBasicDataEntry(BasePath, FullPath, BBAArchiveDataEntryType.TEA);
 			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
 
-			FileStream Input;
-			try
+			using FileStream Input = Utility.OpenInputFile(FullPath);
+			if (Input == null)
 			{
-				Input = File.OpenRead(FullPath);
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine("\n[ERROR] Could not open file \"CurrentPath\": " + ex.Message);
 				return null;
 			}
 
@@ -364,23 +345,16 @@ namespace S7Packer.Source
 
 			byte[] Buffer = new byte[ONE_MIB];
 			long TotalLength = 0;
-			long StoredLength = 0;
-
-			while (true)
+			int BytesRead;
+			while ((BytesRead = Input.ReadAtLeast(Buffer, Buffer.Length, throwOnEndOfStream: false)) > 0)
 			{
-				int BytesRead = Input.ReadAtLeast(Buffer, Buffer.Length, throwOnEndOfStream: false);
-				if (BytesRead == 0)
-				{
-					break;
-				}
-
 				DecompressedCRC.Append(Buffer.AsSpan(0, BytesRead));
 				TotalLength += BytesRead;
 
 				byte[] EncryptedBlock = Buffer;
 				if (BytesRead < Buffer.Length)
 				{
-					int PaddedLength = (BytesRead + 3) & ~3;
+					int PaddedLength = Math.Max(Crypt.MIN_TEA_BLOCK_SIZE, (BytesRead + 3) & ~3);
 					EncryptedBlock = new byte[PaddedLength];
 					Buffer.AsSpan(0, BytesRead).CopyTo(EncryptedBlock);
 				}
@@ -388,7 +362,7 @@ namespace S7Packer.Source
 				Crypt.HandleTEAFile(EncryptedBlock, Definition.FileNameLength, ONE_MIB, Delta, LoopCount, true);
 				CompressedCRC.Append(EncryptedBlock);
 				TemporaryFileData.Write(EncryptedBlock);
-				StoredLength += EncryptedBlock.Length;
+				Definition.CompressedFileSize += (uint)EncryptedBlock.Length;
 
 				if (BytesRead < Buffer.Length)
 				{
@@ -397,7 +371,6 @@ namespace S7Packer.Source
 			}
 
 			Definition.DecompressedFileSize = (uint)TotalLength;
-			Definition.CompressedFileSize = (uint)StoredLength;
 			Definition.DecompressedCRC32 = DecompressedCRC.GetCurrentHashAsUInt32();
 			Definition.CompressedCRC32 = CompressedCRC.GetCurrentHashAsUInt32();
 
@@ -453,30 +426,75 @@ namespace S7Packer.Source
 			MemoryStream FileDictionary = new();
 			FileDictionary.Seek(0, SeekOrigin.Begin);
 
-			uint TotalSize = 0;
-			uint Offset = BBAHeader.Size + BBADirectoryHeader.Size;
+			Dictionary<string, uint> EntryOffsets = new(StringComparer.Ordinal);
+			Dictionary<string, int> EntryIndices = new(StringComparer.Ordinal);
+			Dictionary<string, List<int>> Children = new(StringComparer.Ordinal);
 
+			uint TotalSize = 0;
+			for (int i = 0; i < Files.Count; i++)
+			{
+				BBADataEntry Entry = Files[i];
+				if (!EntryOffsets.TryAdd(Entry.FileName, TotalSize))
+				{
+					throw new InvalidDataException("Duplicate archive entry: " + Entry.FileName);
+				}
+				EntryIndices.Add(Entry.FileName, i);
+
+				if (Entry.FileName != ".")
+				{
+					int Separator = Entry.FileName.LastIndexOf('\\');
+					string Parent = Separator < 0 ? "." : Entry.FileName[..Separator];
+					if (!Children.TryGetValue(Parent, out List<int> Siblings))
+					{
+						Siblings = [];
+						Children.Add(Parent, Siblings);
+					}
+
+					Siblings.Add(i);
+				}
+
+				TotalSize += (uint)Entry.GetFullSizeWithPadding();
+			}
+
+			uint[] NextSiblingOffsets = new uint[Files.Count];
+			Array.Fill(NextSiblingOffsets, uint.MaxValue);
+			foreach (string Parent in Children.Keys)
+			{
+				if (!EntryIndices.TryGetValue(Parent, out int ParentIndex) ||
+					Files[ParentIndex].GetDefinition().FileType != (uint)BBAArchiveDataEntryType.Directory)
+				{
+					throw new InvalidDataException("Archive entry has no parent directory: " + Parent);
+				}
+
+				List<int> Siblings = Children[Parent];
+				for (int i = 0; i + 1 < Siblings.Count; i++)
+				{
+					NextSiblingOffsets[Siblings[i]] = EntryOffsets[Files[Siblings[i + 1]].FileName];
+				}
+			}
+
+			uint Offset = BBAHeader.Size + BBADirectoryHeader.Size;
 			for (int i = 0; i < Files.Count; i++)
 			{
 				BBADataEntry Element = Files[i];
 				ref BBADataEntryDefinition Definition = ref Element.GetDefinition();
-				uint EntrySize = (uint)Element.GetFullSizeWithPadding();
-				uint NextEntryOffset = i == Files.Count - 1 ? uint.MaxValue : TotalSize + EntrySize;
+				Definition.NextFileOffset = NextSiblingOffsets[i];
 
 				if (Definition.FileType != (uint)BBAArchiveDataEntryType.Directory)
 				{
 					Definition.FileOffset = Offset;
-					Definition.NextFileOffset = NextEntryOffset;
 					Definition.NextDirectoryOffset = uint.MaxValue;
+				}
+				else if (Children.TryGetValue(Element.FileName, out List<int> ChildEntries))
+				{
+					Definition.NextDirectoryOffset = EntryOffsets[Files[ChildEntries[0]].FileName];
 				}
 				else
 				{
-					Definition.NextFileOffset = uint.MaxValue;
-					Definition.NextDirectoryOffset = NextEntryOffset;
+					Definition.NextDirectoryOffset = uint.MaxValue;
 				}
 
 				Offset += Definition.CompressedFileSize;
-				TotalSize += EntrySize;
 				FileDictionary.Write(Element.Serialize());
 
 				Console.WriteLine("[PACKED] Name: " + Element.FileName);
@@ -491,6 +509,7 @@ namespace S7Packer.Source
 			try
 			{
 				FinalArchiveFile = File.OpenWrite(OutputPath);
+				FinalArchiveFile.Seek(0, SeekOrigin.Begin);
 			}
 			catch
 			{
@@ -498,7 +517,7 @@ namespace S7Packer.Source
 				return false;
 			}
 
-			using BinaryWriter Writer = new(FinalArchiveFile);
+			BinaryWriter Writer = new(FinalArchiveFile);
 
 			BBAHeader Header = new();
 			Writer.Write(Header.Serialize());
@@ -518,6 +537,11 @@ namespace S7Packer.Source
 			TemporaryFileData.Dispose();
 
             Writer.Write(Data);
+
+			FinalArchiveFile.SetLength(FinalArchiveFile.Position);
+			FinalArchiveFile.Flush();
+			FinalArchiveFile.Dispose();
+
 			return true;
         }
 
@@ -556,7 +580,7 @@ namespace S7Packer.Source
 
 			Entry.FileName = Name;
 			Definition.FileNameLength = (uint)Name.Length;
-			Definition.FileNameOffset = 0;
+			Definition.FileNameOffset = (uint)Name.LastIndexOf('\\') + 1;
 			Definition.FileType = (uint)BBAArchiveDataEntryType.Directory;
 			Definition.DecompressedFileSize = 0;
 			Definition.DecompressedCRC32 = 0;
