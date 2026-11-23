@@ -143,7 +143,7 @@ namespace S7Packer.Source
             {
 				case (uint)BBAArchiveDataEntryType.Compressed:
 				{
-					Console.WriteLine("[ZLIB] Name: " + CurrentFile.FileName);
+					Console.WriteLine("[GZIP] Name: " + CurrentFile.FileName);
 					for (int Offset = 0; Offset < Source.Length; Offset += ONE_MIB)
 					{
 						int ChunkSize = Math.Min(ONE_MIB, Source.Length - Offset);
@@ -299,7 +299,7 @@ namespace S7Packer.Source
 			Crc32 DecompressedCRC = new();
 			Crc32 CompressedCRC = new();
 
-			using (GZipStream GZIP = new(CompressedBuffer, CompressionMode.Compress, true))
+			using (GZipStream GZIP = new(CompressedBuffer, CompressionLevel.SmallestSize, true))
 			{
 				Utility.CopyToWithCRC(Input, GZIP, DecompressedCRC);
 			}
@@ -377,28 +377,6 @@ namespace S7Packer.Source
 			return Entry;
 		}
 
-		private static BBADataEntry SetupBasicDataEntry(string BasePath, string FilePath, BBAArchiveDataEntryType FileType)
-		{
-			BBADataEntry Entry = new();
-			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
-			string Name = Utility.SanitizePath(BasePath, FilePath);
-
-			Entry.FileName = Name;
-			Definition.FileNameLength = (uint)Name.Length;
-			Definition.FileNameOffset = (uint)Name.LastIndexOf('\\') + 1;
-			Definition.FileType = (uint)FileType;
-			Definition.TimeStamp = Utility.GetLastWriteTimeFromFileOrDirectory(FilePath);
-			Definition.BlockSize = ONE_MIB;
-			Definition.NextFileOffset = uint.MaxValue;
-			Definition.NextDirectoryOffset = uint.MaxValue;
-
-			FileInfo Info = new(FilePath);
-			Definition.DecompressedFileSize = (uint)Info.Length;
-			Definition.CompressedFileSize = 0;
-
-			return Entry;
-		}
-
 		private byte[] BuildBBADirectory(List<BBADataEntry> Files, byte[] FileDictionary)
 		{
 			MemoryStream Directory = new();
@@ -406,7 +384,6 @@ namespace S7Packer.Source
 
 			BBADirectory RawDirectory = new((uint)FileDictionary.Length + BBADirectory.Size, (uint)Files.Count);
 			Directory.Write(RawDirectory.Serialize());
-
 			Directory.Write(FileDictionary);
 
 			uint HashTableSize = BBAFileHashTable.CalculateHashTableSize((uint)Files.Count);
@@ -509,7 +486,6 @@ namespace S7Packer.Source
 			try
 			{
 				FinalArchiveFile = File.OpenWrite(OutputPath);
-				FinalArchiveFile.Seek(0, SeekOrigin.Begin);
 			}
 			catch
 			{
@@ -517,6 +493,7 @@ namespace S7Packer.Source
 				return false;
 			}
 
+			FinalArchiveFile.Seek(0, SeekOrigin.Begin);
 			BinaryWriter Writer = new(FinalArchiveFile);
 
 			BBAHeader Header = new();
@@ -572,6 +549,28 @@ namespace S7Packer.Source
 			return Entry;
 		}
 
+		private static BBADataEntry SetupBasicDataEntry(string BasePath, string FilePath, BBAArchiveDataEntryType FileType)
+		{
+			BBADataEntry Entry = new();
+			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
+			string Name = Utility.SanitizePath(BasePath, FilePath);
+
+			Entry.FileName = Name;
+			Definition.FileNameLength = (uint)Name.Length;
+			Definition.FileNameOffset = (uint)Name.LastIndexOf('\\') + 1;
+			Definition.FileType = (uint)FileType;
+			Definition.TimeStamp = Utility.GetLastWriteTimeFromFileOrDirectory(FilePath);
+			Definition.BlockSize = ONE_MIB;
+			Definition.NextFileOffset = uint.MaxValue;
+			Definition.NextDirectoryOffset = uint.MaxValue;
+
+			FileInfo Info = new(FilePath);
+			Definition.DecompressedFileSize = (uint)Info.Length;
+			Definition.CompressedFileSize = 0;
+
+			return Entry;
+		}
+
 		private static BBADataEntry AddDirectoryData(string BasePath, string FullPath)
 		{
 			BBADataEntry Entry = new();
@@ -588,7 +587,7 @@ namespace S7Packer.Source
 			Definition.CompressedCRC32 = 0;
 			Definition.FileOffset = 0;
 			Definition.BlockSize = 0;
-			Definition.TimeStamp = 0;
+			Definition.TimeStamp = Utility.GetLastWriteTimeFromFileOrDirectory(FullPath);;
 
 			return Entry;
 		}

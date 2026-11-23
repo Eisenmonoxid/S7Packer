@@ -40,12 +40,12 @@ namespace S7Packer.Source
 		{
 			Definition = new BBADirectoryDefinition
 			{
-				HeaderSize = 64,
+				HeaderSize = BBADirectoryHeader.Size,
 				OffsetFileEntries = Size - 4, // 272
 				OffsetFileHashtable = OffsetFileHashtable,
 				Version = 6,
 				Value = 7,
-				HeaderSize2 = 64,
+				HeaderSize2 = BBADirectoryHeader.Size,
 				HeaderEncryptionID = Crypt.S7_HEAD_CRYPTID,
 				DirectoryEncryptionID = Crypt.S7_DIRECTORY_CRYPTID,
 				FileEncryptionID = Crypt.S7_FILE_CRYPTID,
