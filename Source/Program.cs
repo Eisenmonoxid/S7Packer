@@ -40,17 +40,8 @@ namespace S7Packer.Source
             }
 
             Console.WriteLine("[INFO] Finished!" + (!Result ? " One or more errors occured." : " No errors occured."));
-            Console.WriteLine("[INFO] Press any key to exit ...");
-            
-            try
-            {
-                Console.ReadKey();
-            }
-            catch
-            {
-                // Ignore
-            }
-            
+            Console.WriteLine("[INFO] Exiting ...");
+
             return;
 		}
 
@@ -89,25 +80,27 @@ namespace S7Packer.Source
 
 		static bool Pack(string Folder, string Filepath, bool IsProductVersion)
 		{
-            bool Result = false;
+            BBAArchiveFile Archive;
             Stopwatch Watch = new();
-            BBAArchiveFile Archive = new(Folder, Filepath, IsProductVersion);
+
+            try
+            {
+                Archive = new(Folder, Filepath, IsProductVersion);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ERROR] " + ex.Message);
+                return false;
+            }
 
             Console.WriteLine("\n[INFO] Packing folder content " + Folder + " to archive file " + Filepath + ".\n");
 
             Watch.Start();
-            try
-            {
-                Result = Archive.CreateArchiveFileByFolder();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
+            Archive.CreateArchiveFileByFolder();
             Watch.Stop();
 
             Console.WriteLine("\n[INFO] Operation took " + Watch.ElapsedMilliseconds + " ms.");
-			return Result;
+			return true;
 		}
 
 		static FileStream GetFileStream(string Filepath)

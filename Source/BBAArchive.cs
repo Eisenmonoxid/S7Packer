@@ -20,7 +20,6 @@ namespace S7Packer.Source
 		private const int DEMO_FILE_LOOP = 9;
 		// ------------------------------------------------------------ \\
 		private readonly string ArchiveOutputDirectoryPath;
-		private readonly string ArchiveOutputFilePath;
 		private readonly string InputFolderPath;
 		private readonly FileStream ArchiveFileStream;
 		private readonly BinaryReader GlobalArchiveReader;
@@ -60,16 +59,24 @@ namespace S7Packer.Source
 
 		public BBAArchiveFile(string FolderPath, string OutputArchiveFilePath, bool IsProductVersion)
 		{
-			ArchiveOutputFilePath = OutputArchiveFilePath;
 			InputFolderPath = FolderPath;
 			IS_PRODUCT = IsProductVersion;
+
+			try
+			{
+				ArchiveFileStream = File.OpenWrite(OutputArchiveFilePath);
+			}
+			catch
+			{
+				throw;
+			}
 		}
 
-		public bool CreateArchiveFileByFolder()
+		public void CreateArchiveFileByFolder()
 		{
-			MemoryStream TemporaryFileData = new();
-
+			ChunkedDataStream TemporaryFileData = new();
 			List<BBADataEntry> PackedFiles = [];
+			
 			List<string> ElementsToPack = Utility.GetFiles(InputFolderPath);
 			ElementsToPack.Insert(0, InputFolderPath);
 
@@ -84,7 +91,7 @@ namespace S7Packer.Source
 				PackedFiles.Add(Entry);
             }
 
-			return WriteFullBBAArchiveFile(PackedFiles, TemporaryFileData, ArchiveOutputFilePath);
+			WriteFullBBAArchiveFile(PackedFiles, TemporaryFileData);
 		}
 
 		public bool ExtractAllFilesFromArchive()
@@ -251,7 +258,7 @@ namespace S7Packer.Source
 			return BBAArchiveDataEntryType.Compressed;
 		}
 
-		private BBADataEntry AddRawFileData(string BasePath, string FullPath, MemoryStream TemporaryFileData)
+		private BBADataEntry AddRawFileData(string BasePath, string FullPath, ChunkedDataStream TemporaryFileData)
 		{
 			BBADataEntry Entry = SetupBasicDataEntry(BasePath, FullPath, BBAArchiveDataEntryType.None);
 			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
@@ -284,7 +291,7 @@ namespace S7Packer.Source
             return Entry;
         }
 
-		private BBADataEntry AddGZIPCompressedData(string BasePath, string FullPath, MemoryStream TemporaryFileData)
+		private BBADataEntry AddGZIPCompressedData(string BasePath, string FullPath, ChunkedDataStream TemporaryFileData)
 		{
 			BBADataEntry Entry = SetupBasicDataEntry(BasePath, FullPath, BBAArchiveDataEntryType.Compressed);
 			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
@@ -326,7 +333,7 @@ namespace S7Packer.Source
 			return Entry;
 		}
 
-		private BBADataEntry AddTEAEncryptedData(string BasePath, string FullPath, MemoryStream TemporaryFileData)
+		private BBADataEntry AddTEAEncryptedData(string BasePath, string FullPath, ChunkedDataStream TemporaryFileData)
 		{
 			BBADataEntry Entry = SetupBasicDataEntry(BasePath, FullPath, BBAArchiveDataEntryType.TEA);
 			ref BBADataEntryDefinition Definition = ref Entry.GetDefinition();
@@ -480,21 +487,9 @@ namespace S7Packer.Source
 			return FileDictionary.ToArray();
 		}
 
-		private bool WriteFullBBAArchiveFile(List<BBADataEntry> Files, MemoryStream TemporaryFileData, string OutputPath)
+		private void WriteFullBBAArchiveFile(List<BBADataEntry> Files, ChunkedDataStream TemporaryFileData)
 		{
-			FileStream FinalArchiveFile;
-			try
-			{
-				FinalArchiveFile = File.OpenWrite(OutputPath);
-			}
-			catch
-			{
-				TemporaryFileData.Dispose();
-				return false;
-			}
-
-			FinalArchiveFile.Seek(0, SeekOrigin.Begin);
-			BinaryWriter Writer = new(FinalArchiveFile);
+			BinaryWriter Writer = new(ArchiveFileStream);
 
 			BBAHeader Header = new();
 			Writer.Write(Header.Serialize());
@@ -509,20 +504,15 @@ namespace S7Packer.Source
 			byte[] DirectoryHeaderData = DirectoryHeader.Encrypt(IS_PRODUCT ? PROD_HEAD_DELTA : DEMO_HEAD_DELTA, IS_PRODUCT ? PROD_HEAD_LOOP : DEMO_HEAD_LOOP);
             Writer.Write(DirectoryHeaderData);
 
-			TemporaryFileData.Seek(0, SeekOrigin.Begin);
-			TemporaryFileData.CopyTo(Writer.BaseStream);
-			TemporaryFileData.Dispose();
+			TemporaryFileData.CopyToAllDataAndDispose(Writer.BaseStream);
 
             Writer.Write(Data);
 
-			FinalArchiveFile.SetLength(FinalArchiveFile.Position);
-			FinalArchiveFile.Flush();
-			FinalArchiveFile.Dispose();
-
-			return true;
+			ArchiveFileStream.SetLength(ArchiveFileStream.Position);
+			ArchiveFileStream.Dispose();
         }
 
-		private BBADataEntry CreateDataEntry(string BasePath, string FilePath, MemoryStream TemporaryDataStream)
+		private BBADataEntry CreateDataEntry(string BasePath, string FilePath, ChunkedDataStream TemporaryDataStream)
 		{
 			BBADataEntry Entry;
 			if (File.Exists(FilePath))
