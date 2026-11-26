@@ -29,6 +29,7 @@ namespace S7Packer.Source
 		private readonly BBAHeader GlobalHeader;
 		private readonly BBADirectoryHeader GlobalDirectoryHeader;
 		private readonly bool IS_PRODUCT;
+		private readonly CompressionLevel GlobalLevel;
 		private readonly Dictionary<BBAArchiveDataEntryType, List<string>> FileTypeExtensions = new()
 		{
 			{BBAArchiveDataEntryType.TEA, 	[".mp3"]},
@@ -48,19 +49,19 @@ namespace S7Packer.Source
 			
 			GlobalHeader = new(GlobalArchiveReader.ReadBytes((int)BBAHeader.Size));
 			GlobalDirectoryHeader = ParseBBADirectoryHeader(GlobalArchiveReader);
-			Tuple<BBADirectory, ReadOnlyMemory<byte>> Data = ParseBBADirectoryAndFileDictionary(GlobalArchiveReader);
-			GlobalDirectory = Data.Item1;
-			GlobalFileData = ParseBBADataEntries(Data.Item2[(int)(GlobalDirectory.GetDefinition().OffsetFileEntries + 4)..], GlobalDirectory.GetDefinition().NumberOfFiles);
-			GlobalHashTable = ParseHashTable(Data.Item2[(int)GlobalDirectory.GetDefinition().OffsetFileHashtable..]);
+			(GlobalDirectory, ReadOnlySpan<byte> Data) = ParseBBADirectoryAndFileDictionary(GlobalArchiveReader);
+			GlobalFileData = ParseBBADataEntries(Data[(int)(GlobalDirectory.GetDefinition().OffsetFileEntries + 4)..], GlobalDirectory.GetDefinition().NumberOfFiles);
+			GlobalHashTable = ParseHashTable(Data[(int)GlobalDirectory.GetDefinition().OffsetFileHashtable..]);
 			// GlobalHashTable.LinkHashTableEntriesToDataEntries(GlobalFileData);
 
 			Console.WriteLine("\n[INFO] Loaded BBA archive with " + GlobalFileData.Count + " files and " + GlobalHashTable.TotalSize + " HashTable entries.");
 		}
 
-		public BBAArchiveFile(string FolderPath, string OutputArchiveFilePath, bool IsProductVersion)
+		public BBAArchiveFile(string FolderPath, string OutputArchiveFilePath, bool IsProductVersion, CompressionLevel? Level)
 		{
 			InputFolderPath = FolderPath;
 			IS_PRODUCT = IsProductVersion;
+			GlobalLevel = Level ?? CompressionLevel.SmallestSize;
 
 			try
 			{
@@ -74,6 +75,12 @@ namespace S7Packer.Source
 
 		public void CreateArchiveFileByFolder()
 		{
+			if (!ArchiveFileStream.CanWrite)
+			{
+				Console.WriteLine("[ERROR] Could write to archive file: " + ArchiveFileStream.Name);
+				return;
+			}
+
 			ChunkedDataStream TemporaryFileData = new();
 			List<BBADataEntry> PackedFiles = [];
 			
@@ -190,14 +197,14 @@ namespace S7Packer.Source
 			return true;
         }
 
-		private List<BBADataEntry> ParseBBADataEntries(ReadOnlyMemory<byte> Data, UInt32 AmountOfFiles)
+		private List<BBADataEntry> ParseBBADataEntries(ReadOnlySpan<byte> Data, UInt32 AmountOfFiles)
 		{
 			List<BBADataEntry> Result = new((int)AmountOfFiles);
 
 			int DataIndex = 0;
 			for (uint i = 0; i < AmountOfFiles; i++)
 			{
-				BBADataEntry Entry = new(Data[DataIndex..].Span);
+				BBADataEntry Entry = new(Data[DataIndex..]);
 				Result.Add(Entry);
 				DataIndex += Entry.GetFullSizeWithPadding();
 			}
@@ -205,7 +212,7 @@ namespace S7Packer.Source
 			return Result;
 		}
 
-		private Tuple<BBADirectory, ReadOnlyMemory<byte>> ParseBBADirectoryAndFileDictionary(BinaryReader Reader)
+		private (BBADirectory, byte[]) ParseBBADirectoryAndFileDictionary(BinaryReader Reader)
 		{
             uint Delta = IS_PRODUCT ? PROD_FILE_DELTA : DEMO_FILE_DELTA;
             int LoopCount = IS_PRODUCT ? PROD_FILE_LOOP : DEMO_FILE_LOOP;
@@ -214,7 +221,7 @@ namespace S7Packer.Source
             byte[] Bytes = Reader.ReadBytes((int)GlobalDirectoryHeader.GetDefinition().Length);
             Crypt.Decrypt(Bytes, BBADirectory.Keys, Delta, LoopCount);
 
-			return new(new BBADirectory(Bytes), Bytes.AsMemory());
+			return (new BBADirectory(Bytes), Bytes);
 		}
 
         private BBADirectoryHeader ParseBBADirectoryHeader(BinaryReader Reader)
@@ -228,12 +235,12 @@ namespace S7Packer.Source
 			return new BBADirectoryHeader(Bytes);
         }
 
-		private static BBAFileHashTable ParseHashTable(ReadOnlyMemory<byte> Data)
+		private static BBAFileHashTable ParseHashTable(ReadOnlySpan<byte> Data)
 		{
-			Int32 Offset = 4;
-			UInt32 AmountOfHashTableEntries = MemoryMarshal.Read<UInt32>(Data[..Offset].Span);
+			Int32 Offset = sizeof(UInt32);
+			UInt32 AmountOfHashTableEntries = MemoryMarshal.Read<UInt32>(Data[..Offset]);
 			BBAFileHashTable HashTable = new(AmountOfHashTableEntries);
-			return HashTable.ParseHashTableFromHeader(Data[Offset..].Span);
+			return HashTable.ParseHashTableFromHeader(Data[Offset..]);
 		}
 
 		private BBAArchiveDataEntryType GetOriginalFileTypeByName(string FileName)
@@ -306,7 +313,7 @@ namespace S7Packer.Source
 			Crc32 DecompressedCRC = new();
 			Crc32 CompressedCRC = new();
 
-			using (GZipStream GZIP = new(CompressedBuffer, CompressionLevel.SmallestSize, true))
+			using (GZipStream GZIP = new(CompressedBuffer, GlobalLevel, true))
 			{
 				Utility.CopyToWithCRC(Input, GZIP, DecompressedCRC);
 			}

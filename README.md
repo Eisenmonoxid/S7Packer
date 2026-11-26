@@ -12,12 +12,15 @@ C:\Settlers\S7Packer.exe C:\Settlers\Maps.bba -- Unpacks the content of the arch
 C:\Settlers\S7Packer.exe C:\Settlers\Maps_Extracted\ C:\Settlers\Maps.bba -- Packs the contents of Maps_Extracted into Maps.bba
 ```
 
-To use the demo, pass the command line argument `--demo` to the S7Packer.
+- To use the demo, pass the command line argument `--demo` to the S7Packer.
+- Per default, the application will use `CompressionLevel.SmallestSize` when compressing files. This can take quite a long time on larger archives, so it's possible
+to control the setting by using the command line argument `--CompressionLevel:<Level>` where you replace `<Level>` with the corresponding number value for the [CompressionLevel](https://learn.microsoft.com/en-us/dotnet/api/system.io.compression.compressionlevel?view=net-11.0).
 
 ## Features
 - Extracts all data from Settlers 7 .bba archive files from both the demo and the final release of the game.
 - Can repack files into a .bba archive file. In contrast to the original tool, it is also possible to add and remove files from an archive.
 - Supports both Windows and Linux.
 - Fixes multiple errors (like extracting Sound.bba, repacking Maps.bba or rebuilding the HashTable) of the original tool.
+- Can handle archive files with size >= 2 GB.
 
 **Should there be any questions: [Settlers Discord Server](https://discord.gg/7SGkQtAAET).**

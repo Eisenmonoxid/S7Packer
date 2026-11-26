@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -24,6 +25,20 @@ namespace S7Packer.Source
             bool ProductOrDemo = args.Any(Element => Element.Contains("--demo"));
             string Folder = args.FirstOrDefault(Element => !Element.EndsWith(".bba") && Directory.Exists(Element));
             string Filepath = args.FirstOrDefault(Element => Element.EndsWith(".bba"));
+            string Level = args.FirstOrDefault(Element => Element.StartsWith("--CompressionLevel:"));
+            CompressionLevel? ConvertedLevel = null;
+
+            if (Level != default)
+            {
+                try
+                {
+                    ConvertedLevel = (CompressionLevel)Convert.ToUInt32(Level.Replace("--CompressionLevel:", ""));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[ERROR] Could not parse CompressionLevel! Using: " + ConvertedLevel.ToString() + ". Message: " + ex.ToString());
+                }
+            }
 
             if (Folder == default)
             {
@@ -36,7 +51,7 @@ namespace S7Packer.Source
             }
             else
             {
-                Result = Pack(Folder, Filepath, !ProductOrDemo);
+                Result = Pack(Folder, Filepath, !ProductOrDemo, ConvertedLevel);
             }
 
             Console.WriteLine("[INFO] Finished!" + (!Result ? " One or more errors occured." : " No errors occured."));
@@ -78,14 +93,14 @@ namespace S7Packer.Source
 			return Result;
         }
 
-		static bool Pack(string Folder, string Filepath, bool IsProductVersion)
+		static bool Pack(string Folder, string Filepath, bool IsProductVersion, CompressionLevel? Level)
 		{
             BBAArchiveFile Archive;
             Stopwatch Watch = new();
 
             try
             {
-                Archive = new(Folder, Filepath, IsProductVersion);
+                Archive = new(Folder, Filepath, IsProductVersion, Level);
             }
             catch (Exception ex)
             {
